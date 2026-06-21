@@ -112,11 +112,25 @@
   .perm-grid{display:flex;flex-direction:column;gap:8px;margin:6px 0 4px;}
   .perm-grid label{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;}
   .perm-grid input{width:16px;height:16px;accent-color:var(--teal);}
-  .field-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
-  .field-row input[type=text]{flex:1;min-width:120px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px;}
-  .field-row input[type=color]{width:42px;height:38px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);cursor:pointer;padding:2px;}
-  .toggle-line{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:12px;}
-  .toggle-line input{width:16px;height:16px;accent-color:var(--teal);}
+  /* role editor */
+  .role-preview{display:flex;align-items:center;justify-content:center;gap:10px;background:radial-gradient(circle at 50% 30%, var(--surface-2), var(--surface));border:1px solid var(--border);border-radius:12px;padding:22px 16px;margin-bottom:18px;min-height:64px;}
+  .role-preview .role-tag{margin-left:0;}
+  .field-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;color:var(--text-dim);margin-bottom:6px;}
+  .role-fields{display:flex;gap:12px;align-items:flex-end;margin-bottom:14px;}
+  .rf-block{display:flex;flex-direction:column;}
+  .rf-block.grow{flex:1;}
+  .role-fields input[type=text]{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 13px;font-size:14px;}
+  .role-fields input[type=color]{width:48px;height:42px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);cursor:pointer;padding:3px;}
+  .switch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:11px 13px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:16px;transition:border-color .12s,background .12s;}
+  .switch-row:has(input:checked){border-color:var(--teal);background:rgba(79,193,184,.10);}
+  .switch-row input{width:18px;height:18px;accent-color:var(--teal);cursor:pointer;}
+  .perm-list{display:flex;flex-direction:column;gap:7px;margin:6px 0 4px;}
+  .perm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:10px 13px;font-size:13px;color:var(--text);cursor:pointer;transition:border-color .12s,background .12s;}
+  .perm-row:hover{border-color:var(--text-dim);}
+  .perm-row:has(input:checked){border-color:var(--teal);background:rgba(79,193,184,.10);}
+  .perm-row input{width:18px;height:18px;accent-color:var(--teal);cursor:pointer;flex-shrink:0;}
+  .perm-row.locked{opacity:.5;cursor:not-allowed;}
+  .role-scroll{max-height:64vh;overflow-y:auto;margin:0 -4px;padding:0 4px;}
 
   @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
 
@@ -1247,27 +1261,51 @@ function editRole(roleId){
   const pulse = existing ? existing.pulse : false;
   const perms = existing ? (existing.permissions||[]) : [];
   const isAll = perms.includes('all');
+  const lockLabel = existing && existing.system;
   document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
   const o = document.createElement('div'); o.className='modal-overlay';
-  o.innerHTML = `<div class="modal-card" style="max-width:420px;">
+  o.innerHTML = `<div class="modal-card" style="max-width:440px;">
     <h3>${existing?'Edit role':'New role'}</h3>
-    <div class="field-row">
-      <input id="roleLabel" type="text" placeholder="Badge text (e.g. MOD)" value="${esc(label)}" maxlength="14" ${existing&&existing.system?'disabled':''}>
-      <input id="roleColor" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(color)?color:'#7a5cff'}">
+    <div class="role-scroll">
+      <div class="role-preview" id="rolePreview"></div>
+      <div class="role-fields">
+        <div class="rf-block grow">
+          <div class="field-label">BADGE LABEL</div>
+          <input id="roleLabel" type="text" placeholder="e.g. MOD" value="${esc(label)}" maxlength="14" ${lockLabel?'disabled':''}>
+        </div>
+        <div class="rf-block">
+          <div class="field-label">COLOR</div>
+          <input id="roleColor" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(color)?color:'#7a5cff'}">
+        </div>
+      </div>
+      <label class="switch-row"><span>Glowing / pulsing badge</span><input type="checkbox" id="rolePulse" ${pulse?'checked':''}></label>
+      <div class="field-label">PERMISSIONS</div>
+      ${isAll?`<div class="self-note" style="margin:2px 0 8px;">System role &mdash; has every permission. These are locked.</div>`:''}
+      <div class="perm-list">
+        ${PERM_DEFS.map(p=>`<label class="perm-row ${isAll?'locked':''}"><span>${p.label}</span><input type="checkbox" class="permbox" value="${p.id}" ${perms.includes(p.id)||isAll?'checked':''} ${isAll?'disabled':''}></label>`).join('')}
+      </div>
+      <div id="roleErr" class="auth-error" style="margin:8px 0 4px;"></div>
     </div>
-    <label class="toggle-line"><input type="checkbox" id="rolePulse" ${pulse?'checked':''}> Glowing / pulsing badge</label>
-    <div class="ctl-label" style="margin-top:0;">PERMISSIONS</div>
-    ${existing&&existing.system&&isAll?`<div class="self-note" style="margin-bottom:8px;">This is a system role with all permissions; permissions are locked.</div>`:''}
-    <div class="perm-grid">
-      ${PERM_DEFS.map(p=>`<label><input type="checkbox" class="permbox" value="${p.id}" ${perms.includes(p.id)||isAll?'checked':''} ${isAll?'disabled':''}> ${p.label}</label>`).join('')}
-    </div>
-    <div id="roleErr" class="auth-error" style="margin:6px 0 8px;"></div>
-    <div class="modal-actions">
+    <div class="modal-actions" style="margin-top:14px;">
       <button class="secondary-btn" onclick="renderRoleManager()">Back</button>
       <button class="primary-btn" onclick="saveRole('${roleId}')">Save</button>
     </div></div>`;
   document.body.appendChild(o);
   o.addEventListener('click', e=>{ if(e.target===o){ o.remove(); renderRoleManager(); } });
+  const lbl = document.getElementById('roleLabel');
+  const col = document.getElementById('roleColor');
+  const pul = document.getElementById('rolePulse');
+  if (lbl) lbl.addEventListener('input', updateRolePreview);
+  if (col) col.addEventListener('input', updateRolePreview);
+  if (pul) pul.addEventListener('change', updateRolePreview);
+  updateRolePreview();
+}
+function updateRolePreview(){
+  const el = document.getElementById('rolePreview'); if (!el) return;
+  const label = (document.getElementById('roleLabel')?.value||'').trim() || 'PREVIEW';
+  const color = document.getElementById('roleColor')?.value || '#7a5cff';
+  const pulse = !!document.getElementById('rolePulse')?.checked;
+  el.innerHTML = `<span class="role-tag lg" style="${roleTagStyle({color, pulse})}">${esc(label)}</span>`;
 }
 async function saveRole(roleId){
   const err = document.getElementById('roleErr');
