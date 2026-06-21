@@ -153,7 +153,9 @@
   .panel input,.panel textarea{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px;resize:vertical;}
   .panel-actions{display:flex;gap:10px;justify-content:flex-end;}
 
-  .thread-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
+  .thread-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
+  .thread-del{position:absolute;top:10px;right:10px;background:transparent;border:none;color:var(--text-dim);font-size:18px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:6px;}
+  .thread-del:hover{color:var(--danger);background:var(--surface-2);}
   .thread-card:hover{border-color:var(--teal);}
   .thread-card h3{font-family:var(--font-display);font-size:18px;font-weight:600;margin:0 0 6px;}
   .thread-meta{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
@@ -273,8 +275,10 @@ const PERM_DEFS = [
   {id:'manage_users', label:'Edit usernames & names'},
   {id:'create_roles', label:'Create / edit roles'},
   {id:'manage_channels', label:'Create / delete channels'},
+  {id:'manage_threads', label:'Delete any thread'},
 ];
-const MOD_PERMS = ['ban','kick','timeout','manage_roles','manage_users','create_roles','manage_channels'];
+const MOD_PERMS = ['ban','kick','timeout','manage_roles','manage_users','create_roles'];
+function canDeleteThread(t){ return t && (t.authorId===state.me.id || can(state.me.id,'manage_threads')); }
 function rolesSorted(){ return (state.roles||[]).slice().sort((a,b)=>a.rank-b.rank); }
 function roleDef(id){ return (state.roles||[]).find(r=>r.id===id) || null; }
 function getUserRoles(userId){ const p = state.directory[userId]; return (p && Array.isArray(p.roles)) ? p.roles : []; }
@@ -727,7 +731,9 @@ function renderBoardList(full){
 }
 function threadListHtml(threads, channel){
   if (!threads.length) return `<div class="empty-state"><p>Nothing posted in #${esc(channel.name)} yet. Start the first thread.</p></div>`;
-  return threads.map(t=>`<div class="thread-card" onclick="openThread('${t.id}')"><h3>${esc(t.title)}</h3>
+  return threads.map(t=>`<div class="thread-card" onclick="openThread('${t.id}')">
+    ${canDeleteThread(t)?`<button class="thread-del" title="Delete thread" onclick="event.stopPropagation(); deleteThread('${t.id}')">&times;</button>`:''}
+    <h3 style="padding-right:24px;">${esc(t.title)}</h3>
     <div class="thread-meta">${authorLink(t.authorId,'event.stopPropagation();')}<span>${relTime(t.createdAt)}</span><span>${t.replyCount} repl${t.replyCount===1?'y':'ies'}</span></div></div>`).join('');
 }
 async function selectChannel(id){ state.activeChannel=id; state.showNewThread=false; state.showNewChannel=false; renderBoardList(true); }
@@ -767,6 +773,28 @@ async function confirmDeleteChannel(id){
   renderBoardList(true);
 }
 
+function deleteThread(id){
+  const t = state.threads.find(x=>x.id===id); if (!t) return;
+  if (!canDeleteThread(t)) return;
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card"><h3>Delete this thread?</h3>
+    <p style="color:var(--text-dim);font-size:13px;line-height:1.5;margin:0 0 18px;">&ldquo;${esc(t.title)}&rdquo; and all of its replies will be permanently removed. This can't be undone.</p>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+      <button class="primary-btn" style="background:var(--danger);color:#fff;" onclick="confirmDeleteThread('${id}')">Delete thread</button>
+    </div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e => { if (e.target===o) o.remove(); });
+}
+async function confirmDeleteThread(id){
+  document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
+  const { error } = await sb.from('threads').delete().eq('id', id);
+  if (error){ showNotice('Could not delete', esc(error.message)); return; }
+  await loadThreads();
+  if (state.view==='thread' && state.openThreadId===id){ state.view='list'; renderBoard(); }
+  else renderBoardList(true);
+}
+
 async function submitNewThread(channelId){
   const title = (document.getElementById('newThreadTitle').value||'').trim();
   const body = (document.getElementById('newThreadBody').value||'').trim();
@@ -792,8 +820,11 @@ function renderThreadDetail(full){
   const ch = state.channels.find(c=>c.id===thread.channelId)||{name:''};
   document.getElementById('main').innerHTML = `
     <div class="board-main" style="max-width:760px;margin:0 auto;">
-      <button class="back-link" onclick="backToList()">&larr; back to #${esc(ch.name)}</button>
-      <h1 class="thread-title">${esc(thread.title)}</h1>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <button class="back-link" onclick="backToList()" style="margin-bottom:0;">&larr; back to #${esc(ch.name)}</button>
+        ${canDeleteThread(thread)?`<button class="secondary-btn" style="border-color:var(--danger);color:var(--danger);" onclick="deleteThread('${thread.id}')">Delete thread</button>`:''}
+      </div>
+      <h1 class="thread-title" style="margin-top:16px;">${esc(thread.title)}</h1>
       ${state.posts[0]?postCardHtml(state.posts[0]):''}
       <div class="reply-count-label" id="replyCountLabel">${replies.length}${replies.length===1?' REPLY':' REPLIES'}</div>
       <div id="repliesList">${repliesHtml(replies)}</div>
