@@ -473,8 +473,8 @@ function renderShell(){
         <span class="online-count"><span class="dot"></span><span id="onlineCount">1</span> online</span>
         <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${isDeveloperUser(state.me.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
         <button class="profile-pill" onclick="openProfile(state.me.id)">
-          <span class="avatar" style="background:${state.me.color}">${initials(state.me.name)}</span>
-          ${esc(state.me.name)}<span id="pillRoleTags">${roleTags(state.me.id)}</span>
+          <span class="avatar" id="pillAvatar" style="background:${state.me.color}">${initials(state.me.name)}</span>
+          <span id="pillName">${esc(state.me.name)}</span><span id="pillRoleTags">${roleTags(state.me.id)}</span>
         </button>
       </div>
     </div>
@@ -838,7 +838,47 @@ function userRowHtml(u){
     <span class="avatar" style="background:${u.color}">${initials(u.name)}</span>
     <span class="uname">${esc(u.name)}${u.username?` <span style="color:var(--text-dim);font-weight:400;font-family:var(--font-mono);font-size:11px;">@${esc(u.username)}</span>`:''}${isMe?' <span style="color:var(--text-dim);font-weight:400;">(you)</span>':''}</span>
     ${status}</div>
+    <div class="ctl-label">IDENTITY</div><div class="ctl-row"><button class="chip" onclick="editUserIdentity('${u.id}')">Edit username &amp; name</button></div>
     <div class="ctl-label">ROLES</div><div class="ctl-row">${roleChips}</div>${mod}</div>`;
+}
+
+function editUserIdentity(userId){
+  if (!isDeveloperUser(state.me.id)) return;
+  const u = state.directory[userId]; if (!u) return;
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card"><h3>Edit identity</h3>
+    <div class="ctl-label" style="margin-top:0;">USERNAME (the @handle they signed up with)</div>
+    <input id="idUsername" value="${esc(u.username||'')}" maxlength="20" autocomplete="off">
+    <div class="ctl-label">DISPLAY NAME</div>
+    <input id="idName" value="${esc(u.name||'')}" maxlength="24" autocomplete="off">
+    <div id="idError" class="auth-error" style="margin:-2px 0 10px;"></div>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+      <button class="primary-btn" onclick="saveUserIdentity('${userId}')">Save</button>
+    </div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e => { if (e.target===o) o.remove(); });
+  document.getElementById('idUsername').focus();
+}
+
+async function saveUserIdentity(userId){
+  const uname = (document.getElementById('idUsername').value||'').trim();
+  const dname = (document.getElementById('idName').value||'').trim();
+  const err = document.getElementById('idError');
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(uname)){ err.textContent='Usernames are 3-20 characters: letters, numbers, underscore.'; return; }
+  if (!dname){ err.textContent='Display name cannot be empty.'; return; }
+  err.textContent='Saving…';
+  const { data: taken } = await sb.from('profiles').select('id').eq('username', uname).neq('id', userId).maybeSingle();
+  if (taken){ err.textContent='That username is taken.'; return; }
+  const { error } = await sb.from('profiles').update({ username: uname, name: dname }).eq('id', userId);
+  if (error){ err.textContent = String(error.message||'').includes('duplicate') ? 'That username is taken.' : error.message; return; }
+  if (userId===state.me.id){
+    state.me.username = uname; state.me.name = dname;
+    const pn=document.getElementById('pillName'); if (pn) pn.textContent = dname;
+    const pa=document.getElementById('pillAvatar'); if (pa) pa.textContent = initials(dname);
+  }
+  document.querySelector('.modal-overlay').remove();
+  await afterConsoleMutation();
 }
 
 async function toggleRole(userId, roleId){
