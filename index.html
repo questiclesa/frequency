@@ -167,10 +167,10 @@
   .chat-msg .avatar{width:30px;height:30px;font-size:12px;margin-top:2px;}
   .chat-meta{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-bottom:2px;}
   .chat-meta b{color:var(--text);font-family:var(--font-body);font-size:13px;font-weight:600;margin-right:6px;}
-  .chat-text{font-size:14px;line-height:1.5;white-space:pre-wrap;}
-  .chat-input-bar{border-top:1px solid var(--border);padding:16px 36px;display:flex;gap:12px;background:var(--surface);}
-  .chat-input-bar input{flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:11px 18px;font-size:14px;}
-  .chat-input-bar button{background:var(--teal);color:#0e1f1d;border:none;border-radius:999px;padding:0 22px;font-weight:700;font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;cursor:pointer;}
+  .chat-text{font-size:14px;line-height:1.5;white-space:pre-wrap;max-width:30ch;overflow-wrap:anywhere;word-break:break-word;}
+  .chat-input-bar{border-top:1px solid var(--border);padding:16px 36px;display:flex;gap:12px;background:var(--surface);align-items:flex-end;}
+  .chat-input-bar textarea{width:30ch;max-width:calc(100% - 96px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:18px;padding:10px 16px;font-size:14px;line-height:1.4;resize:none;overflow-y:auto;max-height:140px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;}
+  .chat-input-bar button{background:var(--teal);color:#0e1f1d;border:none;border-radius:18px;padding:0 22px;height:42px;font-weight:700;font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;cursor:pointer;flex-shrink:0;}
   .chat-input-bar button:hover{filter:brightness(1.08);}
 
   /* ---------- People / Profile ---------- */
@@ -667,9 +667,12 @@ function renderLive(){
 function renderChatLayout(){
   document.getElementById('main').innerHTML = `
     <div class="live-layout"><div id="chatStream" class="chat-stream"></div>
-    <div class="chat-input-bar"><input id="chatInput" placeholder="Say something on the wire..." maxlength="500">
+    <div class="chat-input-bar"><textarea id="chatInput" rows="1" wrap="soft" placeholder="Say something on the wire..." maxlength="500"></textarea>
     <button onclick="submitChat()">SEND</button></div></div>`;
-  document.getElementById('chatInput').addEventListener('keydown', e => { if(e.key==='Enter') submitChat(); });
+  const ta = document.getElementById('chatInput');
+  const grow = () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
+  ta.addEventListener('input', grow);
+  ta.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); submitChat(); } });
   renderChatStream(true);
 }
 function renderChatStream(scrollEnd){
@@ -686,7 +689,7 @@ async function submitChat(){
   const input = document.getElementById('chatInput'); const text=(input.value||'').trim();
   if (!text) return;
   if (await postingBlocked()) return;
-  input.value='';
+  input.value=''; input.style.height='auto';
   await sb.from('messages').insert({ author_id:state.me.id, body:text });
   await loadChat(); renderChatStream(true);
 }
