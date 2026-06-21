@@ -120,7 +120,26 @@
 
   @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
 
-  main{flex:1;overflow:hidden;}
+  main{flex:1;overflow:hidden;min-width:0;}
+  .app-body{flex:1;display:flex;min-height:0;}
+  .member-sidebar{width:240px;flex-shrink:0;border-left:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:14px 10px;}
+  .ms-title{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;color:var(--text-dim);margin:2px 6px 10px;}
+  .ms-group-head{display:flex;align-items:center;gap:6px;margin:14px 6px 6px;font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;color:var(--text-dim);}
+  .ms-group-head .role-tag{margin-left:0;}
+  .ms-row{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:8px;cursor:pointer;}
+  .ms-row:hover{background:var(--surface-2);}
+  .ms-row.off{opacity:.45;}
+  .ms-row .avatar{width:26px;height:26px;font-size:11px;}
+  .ms-meta{flex:1;min-width:0;}
+  .ms-name{display:block;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ms-badges{display:block;line-height:1;}
+  .ms-badges .role-tag{margin-left:0;margin-right:4px;margin-top:3px;}
+  .ms-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex-shrink:0;}
+  .role-arrows{display:flex;flex-direction:column;gap:1px;margin-right:4px;}
+  .role-arrows button{background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:5px;width:24px;height:17px;line-height:1;cursor:pointer;font-size:10px;padding:0;}
+  .role-arrows button:hover:not(:disabled){color:var(--text);border-color:var(--text-dim);}
+  .role-arrows button:disabled{opacity:.3;cursor:not-allowed;}
+  @media (max-width:900px){ .member-sidebar{display:none;} }
 
   .link-name{background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;}
   .link-name:hover{text-decoration:underline;}
@@ -347,6 +366,7 @@ function mapProfile(r){
     roles: Array.isArray(r.roles)?r.roles:[], banned: !!r.banned,
     timeoutUntil: r.timeout_until ? new Date(r.timeout_until).getTime() : 0,
     kickedAt: r.kicked_at ? new Date(r.kicked_at).getTime() : 0,
+    lastSeen: r.last_seen ? new Date(r.last_seen).getTime() : 0,
     joinedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
   };
 }
@@ -610,7 +630,39 @@ function renderShell(){
         </button>
       </div>
     </div>
-    <main id="main"></main>`;
+    <div class="app-body"><main id="main"></main><aside id="memberSidebar" class="member-sidebar"></aside></div>`;
+  renderMemberSidebar();
+}
+
+function highestRole(u){
+  let best = null;
+  (u.roles||[]).forEach(rid=>{ const r=roleDef(rid); if (r && (!best || r.rank<best.rank)) best=r; });
+  return best;
+}
+function renderMemberSidebar(){
+  const el = document.getElementById('memberSidebar'); if (!el) return;
+  const now = Date.now();
+  const online = u => u.lastSeen && (now-u.lastSeen) < 90000;
+  const members = Object.values(state.directory);
+  const rowHtml = u => `<div class="ms-row ${online(u)?'':'off'}" onclick="openProfile('${u.id}')">
+    ${avatarHtml(u.id)}
+    <div class="ms-meta"><span class="ms-name">${esc(u.name)}</span>${getUserRoles(u.id).length?`<span class="ms-badges">${roleTags(u.id)}</span>`:''}</div>
+    ${online(u)?'<span class="ms-dot"></span>':''}</div>`;
+  const sortMembers = arr => arr.sort((a,b)=> (online(b)?1:0)-(online(a)?1:0) || (a.name||'').localeCompare(b.name||''));
+
+  let html = `<div class="ms-title">MEMBERS &middot; ${members.length}</div>`;
+  rolesSorted().forEach(r=>{
+    const us = sortMembers(members.filter(u=>{ const h=highestRole(u); return h && h.id===r.id; }));
+    if (!us.length) return;
+    html += `<div class="ms-group-head"><span class="role-tag" style="${roleTagStyle(r)}">${esc(r.label)}</span> ${us.length}</div>`;
+    us.forEach(u=>{ html += rowHtml(u); });
+  });
+  const noRole = sortMembers(members.filter(u=>!getUserRoles(u.id).some(rid=>roleDef(rid))));
+  if (noRole.length){
+    html += `<div class="ms-group-head">MEMBERS &middot; ${noRole.length}</div>`;
+    noRole.forEach(u=>{ html += rowHtml(u); });
+  }
+  el.innerHTML = html;
 }
 
 function setActiveTab(tab){
@@ -660,6 +712,7 @@ async function heartbeat(){
   const el = document.getElementById('onlineCount'); if (el) el.textContent = count||1;
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
   const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = canOpenConsole(state.me.id)?'flex':'none';
+  renderMemberSidebar();
 }
 
 function renderKickScreen(){
@@ -1144,12 +1197,18 @@ function openRoleManager(){
 function renderRoleManager(){
   document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
   const o = document.createElement('div'); o.className='modal-overlay';
-  o.innerHTML = `<div class="modal-card" style="max-width:420px;">
+  const sorted = rolesSorted();
+  o.innerHTML = `<div class="modal-card" style="max-width:440px;">
     <h3>Roles</h3>
+    <p style="color:var(--text-dim);font-size:12px;margin:-6px 0 12px;">Order sets where each role's badge sits and how members are grouped in the sidebar. Use the arrows to reorder.</p>
     <div style="max-height:46vh;overflow-y:auto;margin-bottom:14px;">
-      ${rolesSorted().map(r=>`
+      ${sorted.map((r,i)=>`
         <div class="role-mgr-role">
           <div class="role-mgr-head">
+            <span class="role-arrows">
+              <button onclick="moveRole('${r.id}',-1)" ${i===0?'disabled':''} title="Move up">&#9650;</button>
+              <button onclick="moveRole('${r.id}',1)" ${i===sorted.length-1?'disabled':''} title="Move down">&#9660;</button>
+            </span>
             <span class="role-tag" style="${roleTagStyle(r)}">${esc(r.label)}</span>
             <span style="flex:1"></span>
             <button class="chip" onclick="editRole('${r.id}')">Edit</button>
@@ -1164,6 +1223,22 @@ function renderRoleManager(){
     </div></div>`;
   document.body.appendChild(o);
   o.addEventListener('click', e=>{ if(e.target===o) o.remove(); });
+}
+async function moveRole(roleId, dir){
+  const sorted = rolesSorted();
+  const i = sorted.findIndex(r=>r.id===roleId);
+  const j = i + dir;
+  if (i<0 || j<0 || j>=sorted.length) return;
+  const a = sorted[i], b = sorted[j];
+  let ra = a.rank, rb = b.rank;
+  if (ra === rb){ rb = dir<0 ? ra-1 : ra+1; }   // de-tie if needed
+  const e1 = await sb.from('roles').update({ rank: rb }).eq('id', a.id);
+  const e2 = await sb.from('roles').update({ rank: ra }).eq('id', b.id);
+  if (e1.error || e2.error){ showNotice('Could not reorder', esc((e1.error||e2.error).message)); }
+  await loadRoles();
+  renderRoleManager();
+  renderConsole(true);
+  renderMemberSidebar();
 }
 function editRole(roleId){
   const existing = roleId ? roleDef(roleId) : null;
@@ -1221,6 +1296,7 @@ async function saveRole(roleId){
   await loadRoles();
   renderRoleManager();
   renderConsole(true);
+  renderMemberSidebar();
 }
 async function deleteRole(roleId){
   const r = roleDef(roleId); if (!r || r.system) return;
@@ -1230,7 +1306,7 @@ async function deleteRole(roleId){
   const holders = Object.values(state.directory).filter(u=>(u.roles||[]).includes(roleId));
   for (const u of holders){ await sb.from('profiles').update({ roles: u.roles.filter(x=>x!==roleId) }).eq('id', u.id); }
   await Promise.all([loadRoles(), loadDirectory()]);
-  renderRoleManager(); renderConsole(true);
+  renderRoleManager(); renderConsole(true); renderMemberSidebar();
 }
 
 async function kickUser(userId){
@@ -1273,6 +1349,7 @@ async function afterConsoleMutation(){
   await loadDirectory(); renderConsole(true);
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
   const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = canOpenConsole(state.me.id)?'flex':'none';
+  renderMemberSidebar();
 }
 
 /* ================= Go ================= */
