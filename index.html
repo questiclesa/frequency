@@ -72,9 +72,11 @@
   .role-tag{display:inline-flex;align-items:center;margin-left:6px;font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.1em;color:#fff;border:1px solid transparent;border-radius:4px;padding:2px 6px;vertical-align:middle;}
   .role-tag.lg{font-size:11px;padding:3px 9px;margin-left:10px;}
   .role-tag.role-admin{background:var(--danger);border-color:#f08a76;animation:adminPulse 1.4s ease-in-out infinite;}
+  .role-tag.role-dev{background:#5cc8ff;border-color:#a9e4ff;color:#04161f;animation:devPulse 1.4s ease-in-out infinite;}
   .role-tag.role-mod{background:#3b6fd4;border-color:#6f9bf0;}
   .role-tag.role-vip{background:var(--amber);border-color:#ffc488;color:#1a1408;}
   @keyframes adminPulse{0%,100%{box-shadow:0 0 0 0 rgba(226,97,77,.55);opacity:1;}50%{box-shadow:0 0 11px 2px rgba(226,97,77,.75);opacity:.72;}}
+  @keyframes devPulse{0%,100%{box-shadow:0 0 0 0 rgba(92,200,255,.5);opacity:1;}50%{box-shadow:0 0 12px 3px rgba(92,200,255,.85);opacity:.74;}}
 
   /* ---------- Console ---------- */
   .console-btn{background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:8px;font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.06em;padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;}
@@ -102,6 +104,7 @@
   .chip:hover{border-color:var(--text-dim);color:var(--text);}
   .chip.on{background:var(--teal);border-color:var(--teal);color:#0e1f1d;font-weight:600;}
   .chip.on.role-admin-chip{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .chip.on.role-dev-chip{background:#5cc8ff;border-color:#5cc8ff;color:#04161f;}
   .chip.danger{border-color:var(--danger);color:var(--danger);}
   .chip.danger:hover{background:rgba(226,97,77,.12);}
   .chip.disabled{opacity:.4;cursor:not-allowed;}
@@ -224,7 +227,7 @@
    Project Settings → API → "Project URL" and "anon public" key.
    ========================================================================= */
 const SUPABASE_URL = 'https://sqipcioraquvwofymrpa.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaXBjaW9yYXF1dndvZnltcnBhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTk5MDQ3MCwiZXhwIjoyMDk3NTY2NDcwfQ.dqpezlKRXjWxnBpS5HmspKawu98A4EPWRy_XUY0u1u8';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaXBjaW9yYXF1dndvZnltcnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5OTA0NzAsImV4cCI6MjA5NzU2NjQ3MH0.mrIcs8Q7cB58p6N8twuj2j5_-1krl7kA_C9rzHRyVx4';
 /* ========================================================================= */
 
 const CONFIGURED = SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY.length > 20
@@ -250,9 +253,10 @@ function fmtRemaining(ms){ const m = Math.ceil(ms/60000); if (m<60) return m+'m'
 function signalIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/><path d="M8.5 14.5a5 5 0 0 1 7 0"/><path d="M5 11a9.9 9.9 0 0 1 14 0"/></svg>`; }
 function shieldIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>`; }
 
-const ROLE_DEFS = [ {id:'admin',label:'ADMIN'}, {id:'mod',label:'MOD'}, {id:'vip',label:'VIP'} ];
+const ROLE_DEFS = [ {id:'developer',label:'DEV'}, {id:'admin',label:'ADMIN'}, {id:'mod',label:'MOD'}, {id:'vip',label:'VIP'} ];
 function getUserRoles(userId){ const p = state.directory[userId]; return (p && Array.isArray(p.roles)) ? p.roles : []; }
 function isAdminUser(userId){ return getUserRoles(userId).includes('admin'); }
+function isDeveloperUser(userId){ return getUserRoles(userId).includes('developer'); }
 function roleTags(userId, large){
   return ROLE_DEFS.filter(r => getUserRoles(userId).includes(r.id))
     .map(r => `<span class="role-tag role-${r.id}${large?' lg':''}">${r.label}</span>`).join('');
@@ -467,7 +471,7 @@ function renderShell(){
       </div>
       <div class="who">
         <span class="online-count"><span class="dot"></span><span id="onlineCount">1</span> online</span>
-        <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${isAdminUser(state.me.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
+        <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${isDeveloperUser(state.me.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
         <button class="profile-pill" onclick="openProfile(state.me.id)">
           <span class="avatar" style="background:${state.me.color}">${initials(state.me.name)}</span>
           ${esc(state.me.name)}<span id="pillRoleTags">${roleTags(state.me.id)}</span>
@@ -520,7 +524,7 @@ async function heartbeat(){
   const { count } = await sb.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen', since);
   const el = document.getElementById('onlineCount'); if (el) el.textContent = count||1;
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
-  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = isAdminUser(state.me.id)?'flex':'none';
+  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = isDeveloperUser(state.me.id)?'flex':'none';
 }
 
 function renderBanScreen(){
@@ -776,7 +780,7 @@ async function toggleLike(targetId){
 /* ================= Admin console ================= */
 const TIMEOUT_OPTIONS = [ {mins:5,label:'5m'}, {mins:60,label:'1h'}, {mins:1440,label:'24h'} ];
 async function openConsole(){
-  if (!isAdminUser(state.me.id)) return;
+  if (!isDeveloperUser(state.me.id)) return;
   await loadDirectory();
   if (!document.querySelector('.console-overlay')){
     const o = document.createElement('div'); o.className='console-overlay'; o.id='consoleOverlay';
@@ -798,7 +802,7 @@ function renderConsole(preserve){
   const q = prev.trim().toLowerCase();
   const users = Object.values(state.directory)
     .filter(u=>!q || (u.name||'').toLowerCase().includes(q) || (u.username||'').toLowerCase().includes(q))
-    .sort((a,b)=>{ const ar=a.roles.includes('admin')?0:1, br=b.roles.includes('admin')?0:1; return ar-br || (a.name||'').localeCompare(b.name||''); });
+    .sort((a,b)=>{ const rank=u=>u.roles.includes('developer')?0:u.roles.includes('admin')?1:2; return rank(a)-rank(b) || (a.name||'').localeCompare(b.name||''); });
   overlay.innerHTML = `<div class="console-card">
     <div class="console-head"><h2>${shieldIcon(20)} Admin console</h2>
       <button class="console-close" onclick="closeConsole()" aria-label="Close">&times;</button></div>
@@ -816,8 +820,9 @@ function userRowHtml(u){
     : remaining?`<span class="user-status timed">TIMED OUT &middot; ${fmtRemaining(remaining)} left</span>`
     : `<span class="user-status active">ACTIVE</span>`;
   const roleChips = ROLE_DEFS.map(r=>{
-    const on = u.roles.includes(r.id); const lock = isMe && r.id==='admin';
-    return `<button class="chip ${on?'on':''} ${r.id==='admin'?'role-admin-chip':''} ${lock?'disabled':''}" ${lock?'title="You can&apos;t remove your own admin role"':`onclick="toggleRole('${u.id}','${r.id}')"`}>${r.label}</button>`;
+    const on = u.roles.includes(r.id); const lock = isMe && r.id==='developer';
+    const chipKind = r.id==='admin'?'role-admin-chip':r.id==='developer'?'role-dev-chip':'';
+    return `<button class="chip ${on?'on':''} ${chipKind} ${lock?'disabled':''}" ${lock?'title="You can&apos;t remove your own developer role"':`onclick="toggleRole('${u.id}','${r.id}')"`}>${r.label}</button>`;
   }).join('');
   let mod;
   if (isMe){ mod = `<div class="self-note">Moderation actions are disabled on your own account.</div>`; }
@@ -837,7 +842,7 @@ function userRowHtml(u){
 }
 
 async function toggleRole(userId, roleId){
-  if (userId===state.me.id && roleId==='admin') return;
+  if (userId===state.me.id && roleId==='developer') return;
   const u = state.directory[userId]; if (!u) return;
   const roles = u.roles.slice();
   const i = roles.indexOf(roleId); if (i===-1) roles.push(roleId); else roles.splice(i,1);
@@ -865,7 +870,7 @@ async function clearUserTimeout(userId){
 async function afterConsoleMutation(){
   await loadDirectory(); renderConsole(true);
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
-  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = isAdminUser(state.me.id)?'flex':'none';
+  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = isDeveloperUser(state.me.id)?'flex':'none';
 }
 
 /* ================= Go ================= */
