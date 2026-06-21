@@ -105,7 +105,16 @@
   .chip.danger:hover{background:rgba(226,97,77,.12);}
   .chip.disabled{opacity:.4;cursor:not-allowed;}
   .self-note{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
-  .console-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px;}
+  .console-toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;}
+  .chat-topbar{display:flex;justify-content:flex-end;padding:8px 36px;border-bottom:1px solid var(--border);}
+  .chat-del{background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:0 4px;margin-left:4px;border-radius:4px;opacity:0;transition:opacity .12s;}
+  .chat-msg:hover .chat-del{opacity:1;}
+  .chat-del:hover{color:var(--danger);}
+  .filter-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:8px;}
+  .filter-word{flex:1;font-size:13px;color:var(--text);word-break:break-all;}
+  .filter-mode{font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;border-radius:4px;padding:2px 7px;}
+  .filter-mode.block{color:var(--danger);border:1px solid var(--danger);}
+  .filter-mode.censor{color:var(--amber);border:1px solid var(--amber);}
   .role-mgr-role{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
   .role-mgr-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
   .role-mgr-perms{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:6px;}
@@ -313,12 +322,26 @@ const PERM_DEFS = [
   {id:'manage_users', label:'Edit usernames & names'},
   {id:'create_roles', label:'Create / edit roles'},
   {id:'manage_channels', label:'Create / delete channels'},
-  {id:'manage_threads', label:'Delete any thread'},
+  {id:'manage_threads', label:'Delete / lock threads'},
   {id:'pin_threads', label:'Pin / unpin threads'},
+  {id:'manage_messages', label:'Delete chat messages & replies'},
+  {id:'manage_filters', label:'Manage word filters'},
 ];
-const MOD_PERMS = ['ban','kick','timeout','manage_roles','manage_users','create_roles'];
+const MOD_PERMS = ['ban','kick','timeout','manage_roles','manage_users','create_roles','manage_filters'];
 function canDeleteThread(t){ return t && (t.authorId===state.me.id || can(state.me.id,'manage_threads')); }
 function canPinThreads(){ return can(state.me.id,'pin_threads'); }
+function canManageMessages(){ return can(state.me.id,'manage_messages'); }
+function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+function filterText(text){
+  let out = text;
+  for (const f of (state.filters||[])){
+    if (!f.word) continue;
+    const re = new RegExp(escapeRegex(f.word), 'gi');
+    if (f.mode==='block' && re.test(text)) return { blocked:true };
+    if (f.mode==='censor') out = out.replace(re, m => '*'.repeat(m.length));
+  }
+  return { blocked:false, text:out };
+}
 function pinIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 4h6l-1 7 3 2v1H7v-1l3-2-1-7z"/></svg>`; }
 function rolesSorted(){ return (state.roles||[]).slice().sort((a,b)=>a.rank-b.rank); }
 function roleDef(id){ return (state.roles||[]).find(r=>r.id===id) || null; }
@@ -365,7 +388,7 @@ function authorLink(authorId, extraOnclick){
 const state = {
   me: null, tab:'board', channels:[], activeChannel:'general',
   threads:[], view:'list', openThreadId:null, posts:[], chat:[],
-  directory:{}, follows:{}, likes:{}, profileView:null, roles:[],
+  directory:{}, follows:{}, likes:{}, profileView:null, roles:[], filters:[],
   showNewThread:false, showNewChannel:false, heartbeatHandle:null, sessionStart:Date.now(),
 };
 let pollHandle = null, consolePoll = null;
@@ -579,6 +602,10 @@ async function loadRoles(){
   const { data } = await sb.from('roles').select('*').order('rank',{ascending:true});
   state.roles = (data||[]).map(r => ({ id:r.id, label:r.label, color:r.color||'#888', pulse:!!r.pulse, rank:r.rank||100, permissions:Array.isArray(r.permissions)?r.permissions:[], system:!!r.system }));
 }
+async function loadFilters(){
+  const { data } = await sb.from('word_filters').select('*').order('created_at',{ascending:true});
+  state.filters = (data||[]).map(f => ({ id:f.id, word:f.word, mode:f.mode||'block' }));
+}
 async function loadChannels(){
   const { data } = await sb.from('channels').select('*').order('created_at',{ascending:true});
   state.channels = (data||[]).map(c => ({ id:c.id, name:c.name, desc:c.description||'' }));
@@ -586,7 +613,7 @@ async function loadChannels(){
 }
 async function loadThreads(){
   const { data } = await sb.from('threads').select('*').order('pinned',{ascending:false}).order('last_activity',{ascending:false});
-  state.threads = (data||[]).map(t => ({ id:t.id, channelId:t.channel_id, title:t.title, authorId:t.author_id, pinned:!!t.pinned,
+  state.threads = (data||[]).map(t => ({ id:t.id, channelId:t.channel_id, title:t.title, authorId:t.author_id, pinned:!!t.pinned, locked:!!t.locked,
     createdAt:new Date(t.created_at).getTime(), lastActivity:new Date(t.last_activity).getTime(), replyCount:t.reply_count||0 }));
 }
 async function loadPosts(threadId){
@@ -612,6 +639,7 @@ async function loadLikes(){
 async function afterAuth(){
   await loadDirectory();
   await loadRoles();
+  await loadFilters();
   if (state.me.banned){ renderBanScreen(); return; }
   state.sessionStart = Date.now();
   await loadAvatars();
@@ -718,6 +746,7 @@ async function heartbeat(){
   await sb.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', state.me.id);
   await loadDirectory();
   await loadRoles();
+  await loadFilters();
   if (state.me.banned){ renderBanScreen(); return; }
   if (state.me.kickedAt && state.me.kickedAt > state.sessionStart){ renderKickScreen(); return; }
   await loadAvatars();
@@ -885,10 +914,13 @@ async function pinThread(id, pinned){
 }
 
 async function submitNewThread(channelId){
-  const title = (document.getElementById('newThreadTitle').value||'').trim();
-  const body = (document.getElementById('newThreadBody').value||'').trim();
+  let title = (document.getElementById('newThreadTitle').value||'').trim();
+  let body = (document.getElementById('newThreadBody').value||'').trim();
   if (!title || !body) return;
   if (await postingBlocked()) return;
+  const ft = filterText(title), fb = filterText(body);
+  if (ft.blocked || fb.blocked){ showNotice('Blocked', 'Your thread contains a filtered word.'); return; }
+  title = ft.text; body = fb.text;
   const { data:thr, error } = await sb.from('threads').insert({ channel_id:channelId, title, author_id:state.me.id }).select().single();
   if (error){ showNotice('Could not post thread', esc(error.message)); return; }
   await sb.from('posts').insert({ thread_id:thr.id, author_id:state.me.id, body });
@@ -907,38 +939,64 @@ function renderThreadDetail(full){
     document.getElementById('replyCountLabel').textContent = replies.length+(replies.length===1?' REPLY':' REPLIES'); return;
   }
   const ch = state.channels.find(c=>c.id===thread.channelId)||{name:''};
+  const canLock = can(state.me.id,'manage_threads');
   document.getElementById('main').innerHTML = `
     <div class="board-main" style="max-width:760px;margin:0 auto;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <button class="back-link" onclick="backToList()" style="margin-bottom:0;">&larr; back to #${esc(ch.name)}</button>
-        <div style="display:flex;gap:8px;">
-          ${canPinThreads()?`<button class="secondary-btn" onclick="pinThread('${thread.id}',${thread.pinned?'false':'true'})">${thread.pinned?'Unpin':'Pin'} thread</button>`:''}
-          ${canDeleteThread(thread)?`<button class="secondary-btn" style="border-color:var(--danger);color:var(--danger);" onclick="deleteThread('${thread.id}')">Delete thread</button>`:''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${canPinThreads()?`<button class="secondary-btn" onclick="pinThread('${thread.id}',${thread.pinned?'false':'true'})">${thread.pinned?'Unpin':'Pin'}</button>`:''}
+          ${canLock?`<button class="secondary-btn" onclick="lockThread('${thread.id}',${thread.locked?'false':'true'})">${thread.locked?'Unlock':'Lock'}</button>`:''}
+          ${canDeleteThread(thread)?`<button class="secondary-btn" style="border-color:var(--danger);color:var(--danger);" onclick="deleteThread('${thread.id}')">Delete</button>`:''}
         </div>
       </div>
-      <h1 class="thread-title" style="margin-top:16px;">${thread.pinned?`<span class="pin-badge">${pinIcon(9)} PINNED</span>`:''}${esc(thread.title)}</h1>
-      ${state.posts[0]?postCardHtml(state.posts[0]):''}
+      <h1 class="thread-title" style="margin-top:16px;">${thread.pinned?`<span class="pin-badge">${pinIcon(9)} PINNED</span>`:''}${thread.locked?`<span class="pin-badge" style="color:var(--amber);border-color:var(--amber);">LOCKED</span>`:''}${esc(thread.title)}</h1>
+      ${state.posts[0]?postCardHtml(state.posts[0], thread):''}
       <div class="reply-count-label" id="replyCountLabel">${replies.length}${replies.length===1?' REPLY':' REPLIES'}</div>
-      <div id="repliesList">${repliesHtml(replies)}</div>
-      <div class="panel"><textarea id="replyText" rows="3" placeholder="Write a reply..."></textarea>
-        <div class="panel-actions"><button class="primary-btn" onclick="submitReply('${thread.id}')">Reply</button></div></div>
+      <div id="repliesList">${repliesHtml(replies, thread)}</div>
+      ${thread.locked
+        ? `<div class="empty-state"><p>This thread is locked. No new replies can be posted.</p></div>`
+        : `<div class="panel"><textarea id="replyText" rows="3" placeholder="Write a reply..."></textarea>
+            <div class="panel-actions"><button class="primary-btn" onclick="submitReply('${thread.id}')">Reply</button></div></div>`}
     </div>`;
 }
-function postCardHtml(p){
+function postCardHtml(p, thread){
+  const canDel = p.authorId===state.me.id || canManageMessages();
   return `<div class="post-card"><div class="post-head">
     ${avatarHtml(p.authorId)}
-    ${authorLink(p.authorId)}<span class="post-time">${relTime(p.createdAt)}</span></div>
+    ${authorLink(p.authorId)}<span class="post-time">${relTime(p.createdAt)}</span>
+    ${canDel?`<span style="flex:1"></span><button class="thread-del" title="Delete" style="position:static;font-size:16px;" onclick="deletePost('${p.id}','${p.threadId||''}')">&times;</button>`:''}</div>
     <div class="post-body">${esc(p.text)}</div></div>`;
 }
-function repliesHtml(replies){ return replies.length?replies.map(postCardHtml).join(''):`<div class="empty-state"><p>No replies yet &mdash; be the first to respond.</p></div>`; }
+function repliesHtml(replies, thread){ return replies.length?replies.map(p=>postCardHtml(p, thread)).join(''):`<div class="empty-state"><p>No replies yet &mdash; be the first to respond.</p></div>`; }
 
 async function submitReply(threadId){
-  const el = document.getElementById('replyText'); const text=(el.value||'').trim();
+  const thread = state.threads.find(t=>t.id===threadId);
+  if (thread && thread.locked){ showNotice('Thread locked', 'This thread is locked and no longer accepts replies.'); return; }
+  const el = document.getElementById('replyText'); let text=(el.value||'').trim();
   if (!text) return;
   if (await postingBlocked()) return;
+  const f = filterText(text);
+  if (f.blocked){ showNotice('Blocked', 'Your reply contains a filtered word.'); return; }
+  text = f.text;
   el.value='';
   await sb.from('posts').insert({ thread_id:threadId, author_id:state.me.id, body:text });
   await loadPosts(threadId); renderThreadDetail(true);
+}
+
+async function deletePost(postId){
+  if (!postId) return;
+  const { error } = await sb.from('posts').delete().eq('id', postId);
+  if (error){ showNotice('Could not delete', esc(error.message)); return; }
+  await loadPosts(state.openThreadId); await loadThreads(); renderThreadDetail(true);
+}
+async function lockThread(id, locked){
+  if (!can(state.me.id,'manage_threads')) return;
+  const { error } = await sb.from('threads').update({ locked }).eq('id', id);
+  if (error){ showNotice('Could not update', esc(error.message)); return; }
+  await loadThreads();
+  if (state.view==='thread' && state.openThreadId===id) renderThreadDetail(true);
+  else renderBoardList(true);
 }
 
 /* ================= Live chat ================= */
@@ -947,10 +1005,13 @@ function renderLive(){
   loadChat().then(()=>renderChatLayout());
 }
 function renderChatLayout(){
+  const canClear = canManageMessages();
   document.getElementById('main').innerHTML = `
-    <div class="live-layout"><div id="chatStream" class="chat-stream"></div>
-    <div class="chat-input-bar"><textarea id="chatInput" rows="1" wrap="soft" placeholder="Say something on the wire..." maxlength="500"></textarea>
-    <button onclick="submitChat()">SEND</button></div></div>`;
+    <div class="live-layout" style="grid-template-rows:${canClear?'auto 1fr auto':'1fr auto'};">
+      ${canClear?`<div class="chat-topbar"><button class="secondary-btn" onclick="clearChat()">Clear chat</button></div>`:''}
+      <div id="chatStream" class="chat-stream"></div>
+      <div class="chat-input-bar"><textarea id="chatInput" rows="1" wrap="soft" placeholder="Say something on the wire..." maxlength="500"></textarea>
+      <button onclick="submitChat()">SEND</button></div></div>`;
   const ta = document.getElementById('chatInput');
   const grow = () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
   ta.addEventListener('input', grow);
@@ -961,18 +1022,45 @@ function renderChatStream(scrollEnd){
   const el = document.getElementById('chatStream'); if (!el) return;
   const near = el.scrollHeight-el.scrollTop-el.clientHeight < 80;
   if (!state.chat.length){ el.innerHTML = `<div class="empty-state"><p>The airwaves are quiet. Say something.</p></div>`; return; }
-  el.innerHTML = state.chat.map(m=>`<div class="chat-msg">
-    ${avatarHtml(m.authorId)}
-    <div><div class="chat-meta">${authorLink(m.authorId)}${relTime(m.createdAt)}</div>
-    <div class="chat-text">${esc(m.text)}</div></div></div>`).join('');
+  el.innerHTML = state.chat.map(m=>{
+    const canDel = m.authorId===state.me.id || canManageMessages();
+    return `<div class="chat-msg">
+      ${avatarHtml(m.authorId)}
+      <div style="flex:1;min-width:0;"><div class="chat-meta">${authorLink(m.authorId)}${relTime(m.createdAt)}${canDel?`<button class="chat-del" title="Delete" onclick="deleteMessage('${m.id}')">&times;</button>`:''}</div>
+      <div class="chat-text">${esc(m.text)}</div></div></div>`;
+  }).join('');
   if (scrollEnd || near) el.scrollTop = el.scrollHeight;
 }
 async function submitChat(){
-  const input = document.getElementById('chatInput'); const text=(input.value||'').trim();
+  const input = document.getElementById('chatInput'); let text=(input.value||'').trim();
   if (!text) return;
   if (await postingBlocked()) return;
+  const f = filterText(text);
+  if (f.blocked){ showNotice('Blocked', 'Your message contains a filtered word.'); return; }
+  text = f.text;
   input.value=''; input.style.height='auto';
   await sb.from('messages').insert({ author_id:state.me.id, body:text });
+  await loadChat(); renderChatStream(true);
+}
+async function deleteMessage(id){
+  const { error } = await sb.from('messages').delete().eq('id', id);
+  if (error){ showNotice('Could not delete', esc(error.message)); return; }
+  await loadChat(); renderChatStream(false);
+}
+function clearChat(){
+  if (!canManageMessages()) return;
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card"><h3>Clear all chat?</h3>
+    <p style="color:var(--text-dim);font-size:13px;line-height:1.5;margin:0 0 18px;">This permanently deletes every message in the live chat for everyone. This can't be undone.</p>
+    <div class="modal-actions"><button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+    <button class="primary-btn" style="background:var(--danger);color:#fff;" onclick="confirmClearChat()">Clear chat</button></div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o) o.remove(); });
+}
+async function confirmClearChat(){
+  document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
+  const { error } = await sb.from('messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error){ showNotice('Could not clear', esc(error.message)); return; }
   await loadChat(); renderChatStream(true);
 }
 
@@ -1097,7 +1185,10 @@ function renderConsole(preserve){
     <div class="console-head"><h2>${shieldIcon(20)} Console</h2>
       <button class="console-close" onclick="closeConsole()" aria-label="Close">&times;</button></div>
     <div class="console-body">
-      ${canManageRoles?`<div class="console-toolbar"><button class="primary-btn" onclick="openRoleManager()">Manage roles</button></div>`:''}
+      ${canManageRoles||can(state.me.id,'manage_filters')?`<div class="console-toolbar">
+        ${can(state.me.id,'manage_filters')?`<button class="secondary-btn" onclick="openFilterManager()">Word filters</button>`:''}
+        ${canManageRoles?`<button class="primary-btn" onclick="openRoleManager()">Manage roles</button>`:''}
+      </div>`:''}
       <input id="consoleSearch" class="console-search" placeholder="Search people by name or @username" value="${esc(prev)}" oninput="renderConsole(true)">
       ${users.map(userRowHtml).join('') || '<div class="empty-state"><p>No people match that search.</p></div>'}
     </div></div>`;
@@ -1388,6 +1479,56 @@ async function afterConsoleMutation(){
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
   const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = canOpenConsole(state.me.id)?'flex':'none';
   renderMemberSidebar();
+}
+
+/* ---------- Word filters ---------- */
+async function openFilterManager(){
+  if (!can(state.me.id,'manage_filters')) return;
+  await loadFilters();
+  renderFilterManager();
+}
+function renderFilterManager(){
+  document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card" style="max-width:440px;">
+    <h3>Word filters</h3>
+    <p style="color:var(--text-dim);font-size:12px;margin:-6px 0 12px;">Block stops a message from being posted; Censor replaces the word with ***. Matching is case-insensitive.</p>
+    <div class="field-row" style="display:flex;gap:8px;margin-bottom:14px;">
+      <input id="filterWord" type="text" placeholder="Word or phrase" maxlength="40" style="flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 13px;font-size:14px;">
+      <select id="filterMode" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px;font-size:13px;">
+        <option value="block">Block</option><option value="censor">Censor</option>
+      </select>
+      <button class="primary-btn" onclick="addFilter()">Add</button>
+    </div>
+    <div id="filterErr" class="auth-error" style="margin:-6px 0 8px;"></div>
+    <div style="max-height:42vh;overflow-y:auto;">
+      ${state.filters.length?state.filters.map(f=>`<div class="filter-row">
+        <span class="filter-word">${esc(f.word)}</span>
+        <span class="filter-mode ${f.mode}">${f.mode.toUpperCase()}</span>
+        <button class="chip danger" onclick="deleteFilter('${f.id}')">Remove</button>
+      </div>`).join(''):`<div class="empty-state"><p>No filtered words yet.</p></div>`}
+    </div>
+    <div class="modal-actions" style="margin-top:14px;"><button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Close</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o) o.remove(); });
+  const w = document.getElementById('filterWord');
+  if (w) w.addEventListener('keydown', e=>{ if(e.key==='Enter') addFilter(); });
+}
+async function addFilter(){
+  const word = (document.getElementById('filterWord').value||'').trim();
+  const mode = document.getElementById('filterMode').value || 'block';
+  const err = document.getElementById('filterErr');
+  if (!word){ err.textContent='Enter a word or phrase.'; return; }
+  if (state.filters.some(f=>f.word.toLowerCase()===word.toLowerCase())){ err.textContent='That word is already filtered.'; return; }
+  const { error } = await sb.from('word_filters').insert({ word, mode });
+  if (error){ err.textContent = error.message; return; }
+  await loadFilters(); renderFilterManager();
+}
+async function deleteFilter(id){
+  const { error } = await sb.from('word_filters').delete().eq('id', id);
+  if (error){ showNotice('Could not remove', esc(error.message)); return; }
+  await loadFilters(); renderFilterManager();
 }
 
 /* ================= Go ================= */
