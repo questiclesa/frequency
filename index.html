@@ -65,7 +65,8 @@
   .online-count{display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);display:inline-block;animation:pulse 1.8s infinite;}
   .profile-pill{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;color:var(--text);font-size:13px;}
-  .avatar{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:600;font-size:11px;color:#15181b;flex-shrink:0;}
+  .avatar{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:600;font-size:11px;color:#15181b;flex-shrink:0;overflow:hidden;}
+  .avatar img,.avatar-lg img{width:100%;height:100%;object-fit:cover;display:block;}
 
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 
@@ -183,7 +184,7 @@
 
   .profile-page{padding:28px 36px;overflow-y:auto;height:100%;max-width:640px;margin:0 auto;}
   .profile-top{display:flex;gap:18px;align-items:center;margin-bottom:18px;flex-wrap:wrap;}
-  .avatar-lg{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:700;font-size:24px;color:#15181b;flex-shrink:0;}
+  .avatar-lg{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:700;font-size:24px;color:#15181b;flex-shrink:0;overflow:hidden;}
   .profile-name{font-family:var(--font-display);font-size:30px;font-weight:700;margin:0;}
   .profile-handle{font-family:var(--font-mono);font-size:13px;color:var(--text-dim);margin-top:2px;}
   .profile-joined{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);margin-top:4px;}
@@ -287,6 +288,69 @@ function mapProfile(r){
     timeoutUntil: r.timeout_until ? new Date(r.timeout_until).getTime() : 0,
     joinedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
   };
+}
+
+/* ================= Avatars ================= */
+const avatarCache = {};
+function avatarInner(userId){
+  const img = avatarCache[userId];
+  if (img) return `<img src="${esc(img)}" alt="">`;
+  const p = state.directory[userId];
+  return initials(p ? p.name : '?');
+}
+function avatarHtml(userId, cls){
+  const p = state.directory[userId];
+  return `<span class="${cls||'avatar'}" style="background:${p?p.color:'#888'}">${avatarInner(userId)}</span>`;
+}
+async function loadAvatars(){
+  const { data } = await sb.from('profiles').select('id,avatar');
+  (data||[]).forEach(r => { if (r.avatar) avatarCache[r.id] = r.avatar; else delete avatarCache[r.id]; });
+}
+function triggerAvatarUpload(){
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='image/*';
+  inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) processAvatar(f); };
+  inp.click();
+}
+function resizeImage(file, size, quality){
+  return new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(size/img.width, size/img.height);
+        const w = img.width*scale, h = img.height*scale;
+        ctx.drawImage(img, (size-w)/2, (size-h)/2, w, h);
+        try { res(canvas.toDataURL('image/jpeg', quality)); } catch(e){ res(null); }
+      };
+      img.onerror = () => res(null);
+      img.src = reader.result;
+    };
+    reader.onerror = () => res(null);
+    reader.readAsDataURL(file);
+  });
+}
+async function processAvatar(file){
+  if (file.size > 12*1024*1024){ showNotice('Image too large', 'Please choose an image under 12&nbsp;MB.'); return; }
+  const dataUrl = await resizeImage(file, 144, 0.72);
+  if (!dataUrl){ showNotice('Could not read image', 'That file did not load as an image. Try a JPG or PNG.'); return; }
+  const { error } = await sb.from('profiles').update({ avatar: dataUrl }).eq('id', state.me.id);
+  if (error){ showNotice('Upload failed', esc(error.message)); return; }
+  avatarCache[state.me.id] = dataUrl;
+  refreshPillAvatar();
+  if (state.profileView===state.me.id) renderProfilePage();
+}
+async function removeAvatar(){
+  const { error } = await sb.from('profiles').update({ avatar: null }).eq('id', state.me.id);
+  if (error){ showNotice('Could not remove', esc(error.message)); return; }
+  delete avatarCache[state.me.id];
+  refreshPillAvatar();
+  if (state.profileView===state.me.id) renderProfilePage();
+}
+function refreshPillAvatar(){
+  const pa = document.getElementById('pillAvatar'); if (pa) pa.innerHTML = avatarInner(state.me.id);
 }
 
 /* ================= Boot / config ================= */
@@ -410,7 +474,7 @@ async function doLogout(){
 
 /* ================= Data loaders ================= */
 async function loadDirectory(){
-  const { data } = await sb.from('profiles').select('*');
+  const { data } = await sb.from('profiles').select('id,username,name,color,roles,banned,timeout_until,created_at,last_seen');
   const dir = {};
   (data||[]).forEach(r => dir[r.id] = mapProfile(r));
   state.directory = dir;
@@ -449,6 +513,7 @@ async function loadLikes(){
 async function afterAuth(){
   await loadDirectory();
   if (state.me.banned){ renderBanScreen(); return; }
+  await loadAvatars();
   await loadChannels();
   await loadThreads();
   renderShell();
@@ -473,7 +538,7 @@ function renderShell(){
         <span class="online-count"><span class="dot"></span><span id="onlineCount">1</span> online</span>
         <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${isDeveloperUser(state.me.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
         <button class="profile-pill" onclick="openProfile(state.me.id)">
-          <span class="avatar" id="pillAvatar" style="background:${state.me.color}">${initials(state.me.name)}</span>
+          <span class="avatar" id="pillAvatar" style="background:${state.me.color}">${avatarInner(state.me.id)}</span>
           <span id="pillName">${esc(state.me.name)}</span><span id="pillRoleTags">${roleTags(state.me.id)}</span>
         </button>
       </div>
@@ -520,6 +585,7 @@ async function heartbeat(){
   await sb.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', state.me.id);
   await loadDirectory();
   if (state.me.banned){ renderBanScreen(); return; }
+  await loadAvatars();
   const since = new Date(Date.now()-90000).toISOString();
   const { count } = await sb.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen', since);
   const el = document.getElementById('onlineCount'); if (el) el.textContent = count||1;
@@ -644,7 +710,7 @@ function renderThreadDetail(full){
 }
 function postCardHtml(p){
   return `<div class="post-card"><div class="post-head">
-    <span class="avatar" style="background:${colorOf(p.authorId)}">${initials(nameOf(p.authorId))}</span>
+    ${avatarHtml(p.authorId)}
     ${authorLink(p.authorId)}<span class="post-time">${relTime(p.createdAt)}</span></div>
     <div class="post-body">${esc(p.text)}</div></div>`;
 }
@@ -680,7 +746,7 @@ function renderChatStream(scrollEnd){
   const near = el.scrollHeight-el.scrollTop-el.clientHeight < 80;
   if (!state.chat.length){ el.innerHTML = `<div class="empty-state"><p>The airwaves are quiet. Say something.</p></div>`; return; }
   el.innerHTML = state.chat.map(m=>`<div class="chat-msg">
-    <span class="avatar" style="background:${colorOf(m.authorId)}">${initials(nameOf(m.authorId))}</span>
+    ${avatarHtml(m.authorId)}
     <div><div class="chat-meta">${authorLink(m.authorId)}${relTime(m.createdAt)}</div>
     <div class="chat-text">${esc(m.text)}</div></div></div>`).join('');
   if (scrollEnd || near) el.scrollTop = el.scrollHeight;
@@ -697,7 +763,7 @@ async function submitChat(){
 /* ================= People ================= */
 function renderPeople(){
   setPoll(async ()=>{ await loadDirectory(); await loadFollows(); renderPeopleList(); }, 15000);
-  Promise.all([loadDirectory(), loadFollows()]).then(renderPeopleList);
+  Promise.all([loadDirectory(), loadFollows(), loadAvatars()]).then(renderPeopleList);
 }
 function renderPeopleList(){
   const people = Object.values(state.directory);
@@ -707,11 +773,11 @@ function renderPeopleList(){
     <div class="people-page">
       <div class="board-header"><div><h2>People</h2><p>Everyone with a Frequency account.</p></div></div>
       <div class="people-row" onclick="openProfile('${state.me.id}')">
-        <span class="avatar" style="background:${state.me.color}">${initials(state.me.name)}</span>
+        ${avatarHtml(state.me.id)}
         <div class="meta"><div class="pname">${esc(state.me.name)}${roleTags(state.me.id)} <span style="color:var(--text-dim);font-weight:400;">(you)</span></div>
         <div class="pfollowers">${(state.follows[state.me.id]||[]).length} followers</div></div></div>
       ${others.length?others.map(p=>`<div class="people-row" onclick="openProfile('${p.id}')">
-        <span class="avatar" style="background:${p.color}">${initials(p.name)}</span>
+        ${avatarHtml(p.id)}
         <div class="meta"><div class="pname">${esc(p.name)}${roleTags(p.id)}</div>
         <div class="pfollowers">${(state.follows[p.id]||[]).length} followers</div></div></div>`).join('')
         :`<div class="empty-state"><p>No one else has joined yet. Share the link to invite people.</p></div>`}
@@ -721,7 +787,7 @@ function renderPeopleList(){
 /* ================= Profile ================= */
 async function openProfile(userId){
   state.profileView = userId;
-  await Promise.all([loadDirectory(), loadFollows(), loadLikes(), loadThreads()]);
+  await Promise.all([loadDirectory(), loadFollows(), loadLikes(), loadThreads(), loadAvatars()]);
   setPoll(async ()=>{ await Promise.all([loadDirectory(), loadFollows(), loadLikes()]); if (state.profileView===userId) renderProfilePage(); }, 10000);
   renderProfilePage();
 }
@@ -744,7 +810,7 @@ function renderProfilePage(){
   document.getElementById('main').innerHTML = `
     <div class="profile-page">
       <button class="back-link" onclick="backFromProfile()">&larr; back</button>
-      <div class="profile-top"><div class="avatar-lg" style="background:${person.color}">${initials(person.name)}</div>
+      <div class="profile-top">${avatarHtml(userId,'avatar-lg')}
         <div><h2 class="profile-name">${esc(person.name)}${roleTags(userId,true)}</h2>
         ${person.username?`<div class="profile-handle">@${esc(person.username)}</div>`:''}
         <div class="profile-joined">Joined ${fmtDate(person.joinedAt)}</div></div></div>
@@ -753,6 +819,8 @@ function renderProfilePage(){
         <div><b>${likerIds.length}</b>likes</div><div><b>${threadsByUser.length}</b>threads</div></div>
       <div class="profile-actions">
         ${isMe?`<span class="you-badge">This is you</span>
+          <button class="secondary-btn" onclick="triggerAvatarUpload()">Change picture</button>
+          ${avatarCache[userId]?`<button class="secondary-btn" onclick="removeAvatar()">Remove picture</button>`:''}
           <button class="secondary-btn" onclick="openProfileEditor()">Edit name</button>
           <button class="secondary-btn" onclick="confirmLogout()">Log out</button>`
         :`<button class="follow-btn ${isFollowing?'following':''}" onclick="toggleFollow('${userId}')">${isFollowing?'Following':'Follow'}</button>
@@ -838,7 +906,7 @@ function userRowHtml(u){
       ${banned?`<button class="chip" onclick="setBan('${u.id}',false)">Unban</button>`:`<button class="chip danger" onclick="setBan('${u.id}',true)">Ban</button>`}</div>`;
   }
   return `<div class="user-row ${banned?'is-banned':''}"><div class="user-row-top">
-    <span class="avatar" style="background:${u.color}">${initials(u.name)}</span>
+    ${avatarHtml(u.id)}
     <span class="uname">${esc(u.name)}${u.username?` <span style="color:var(--text-dim);font-weight:400;font-family:var(--font-mono);font-size:11px;">@${esc(u.username)}</span>`:''}${isMe?' <span style="color:var(--text-dim);font-weight:400;">(you)</span>':''}</span>
     ${status}</div>
     <div class="ctl-label">IDENTITY</div><div class="ctl-row"><button class="chip" onclick="editUserIdentity('${u.id}')">Edit username &amp; name</button></div>
@@ -878,7 +946,7 @@ async function saveUserIdentity(userId){
   if (userId===state.me.id){
     state.me.username = uname; state.me.name = dname;
     const pn=document.getElementById('pillName'); if (pn) pn.textContent = dname;
-    const pa=document.getElementById('pillAvatar'); if (pa) pa.textContent = initials(dname);
+    const pa=document.getElementById('pillAvatar'); if (pa) pa.innerHTML = avatarInner(state.me.id);
   }
   document.querySelector('.modal-overlay').remove();
   await afterConsoleMutation();
