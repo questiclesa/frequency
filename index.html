@@ -72,12 +72,7 @@
 
   .role-tag{display:inline-flex;align-items:center;margin-left:6px;font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.1em;color:#fff;border:1px solid transparent;border-radius:4px;padding:2px 6px;vertical-align:middle;}
   .role-tag.lg{font-size:11px;padding:3px 9px;margin-left:10px;}
-  .role-tag.role-admin{background:var(--danger);border-color:#f08a76;animation:adminPulse 1.4s ease-in-out infinite;}
-  .role-tag.role-developer{background:#5cc8ff;border-color:#a9e4ff;color:#04161f;animation:devPulse 1.4s ease-in-out infinite;}
-  .role-tag.role-mod{background:#3b6fd4;border-color:#6f9bf0;}
-  .role-tag.role-vip{background:var(--amber);border-color:#ffc488;color:#1a1408;}
-  @keyframes adminPulse{0%,100%{box-shadow:0 0 0 0 rgba(226,97,77,.55);opacity:1;}50%{box-shadow:0 0 11px 2px rgba(226,97,77,.75);opacity:.72;}}
-  @keyframes devPulse{0%,100%{box-shadow:0 0 0 0 rgba(92,200,255,.55);opacity:1;}50%{box-shadow:0 0 11px 2px rgba(92,200,255,.75);opacity:.72;}}
+  @keyframes rolePulse{0%,100%{box-shadow:0 0 0 0 var(--g0);opacity:1;}50%{box-shadow:0 0 11px 2px var(--g1);opacity:.72;}}
 
   /* ---------- Console ---------- */
   .console-btn{background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:8px;font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.06em;padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;}
@@ -110,6 +105,18 @@
   .chip.danger:hover{background:rgba(226,97,77,.12);}
   .chip.disabled{opacity:.4;cursor:not-allowed;}
   .self-note{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+  .console-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px;}
+  .role-mgr-role{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+  .role-mgr-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .role-mgr-perms{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:6px;}
+  .perm-grid{display:flex;flex-direction:column;gap:8px;margin:6px 0 4px;}
+  .perm-grid label{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;}
+  .perm-grid input{width:16px;height:16px;accent-color:var(--teal);}
+  .field-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+  .field-row input[type=text]{flex:1;min-width:120px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px;}
+  .field-row input[type=color]{width:42px;height:38px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);cursor:pointer;padding:2px;}
+  .toggle-line{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:12px;}
+  .toggle-line input{width:16px;height:16px;accent-color:var(--teal);}
 
   @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
 
@@ -254,13 +261,49 @@ function fmtRemaining(ms){ const m = Math.ceil(ms/60000); if (m<60) return m+'m'
 function signalIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/><path d="M8.5 14.5a5 5 0 0 1 7 0"/><path d="M5 11a9.9 9.9 0 0 1 14 0"/></svg>`; }
 function shieldIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>`; }
 
-const ROLE_DEFS = [ {id:'developer',label:'DEV'}, {id:'admin',label:'ADMIN'}, {id:'mod',label:'MOD'}, {id:'vip',label:'VIP'} ];
+const PERM_DEFS = [
+  {id:'ban',          label:'Ban / unban'},
+  {id:'kick',         label:'Kick'},
+  {id:'timeout',      label:'Timeout'},
+  {id:'manage_roles', label:'Assign roles to people'},
+  {id:'manage_users', label:'Edit usernames & names'},
+  {id:'create_roles', label:'Create / edit roles'},
+];
+const MOD_PERMS = ['ban','kick','timeout','manage_roles','manage_users','create_roles'];
+function rolesSorted(){ return (state.roles||[]).slice().sort((a,b)=>a.rank-b.rank); }
+function roleDef(id){ return (state.roles||[]).find(r=>r.id===id) || null; }
 function getUserRoles(userId){ const p = state.directory[userId]; return (p && Array.isArray(p.roles)) ? p.roles : []; }
-function isAdminUser(userId){ return getUserRoles(userId).includes('admin'); }
-function isDeveloperUser(userId){ return getUserRoles(userId).includes('developer'); }
+function userPermSet(userId){
+  const set = new Set();
+  getUserRoles(userId).forEach(rid => { const r = roleDef(rid); if (r){ (r.permissions||[]).forEach(p=>set.add(p)); } });
+  return set;
+}
+function can(userId, perm){ const s = userPermSet(userId); return s.has('all') || s.has(perm); }
+function canOpenConsole(userId){ return MOD_PERMS.some(p => can(userId, p)); }
+function isDeveloperUser(userId){ return getUserRoles(userId).includes('developer') || userPermSet(userId).has('all'); }
+
+function hexToRgba(hex, a){
+  let h = (hex||'#888888').replace('#','');
+  if (h.length===3) h = h.split('').map(c=>c+c).join('');
+  const n = parseInt(h,16); const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+function readableText(hex){
+  let h = (hex||'#888888').replace('#','');
+  if (h.length===3) h = h.split('').map(c=>c+c).join('');
+  const n = parseInt(h,16); const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  const lum = (0.299*r + 0.587*g + 0.114*b)/255;
+  return lum > 0.6 ? '#04161f' : '#ffffff';
+}
+function roleTagStyle(r){
+  let s = `background:${r.color};border-color:${hexToRgba(r.color,.85)};color:${readableText(r.color)};`;
+  if (r.pulse) s += `animation:rolePulse 1.4s ease-in-out infinite;--g0:${hexToRgba(r.color,.55)};--g1:${hexToRgba(r.color,.78)};`;
+  return s;
+}
 function roleTags(userId, large){
-  return ROLE_DEFS.filter(r => getUserRoles(userId).includes(r.id))
-    .map(r => `<span class="role-tag role-${r.id}${large?' lg':''}">${r.label}</span>`).join('');
+  const ids = getUserRoles(userId);
+  return rolesSorted().filter(r => ids.includes(r.id))
+    .map(r => `<span class="role-tag${large?' lg':''}" style="${roleTagStyle(r)}">${esc(r.label)}</span>`).join('');
 }
 function nameOf(id){ const p = state.directory[id]; return p ? p.name : 'Unknown'; }
 function colorOf(id){ const p = state.directory[id]; return p ? p.color : '#888'; }
@@ -272,8 +315,8 @@ function authorLink(authorId, extraOnclick){
 const state = {
   me: null, tab:'board', channels:[], activeChannel:'general',
   threads:[], view:'list', openThreadId:null, posts:[], chat:[],
-  directory:{}, follows:{}, likes:{}, profileView:null,
-  showNewThread:false, showNewChannel:false, heartbeatHandle:null,
+  directory:{}, follows:{}, likes:{}, profileView:null, roles:[],
+  showNewThread:false, showNewChannel:false, heartbeatHandle:null, sessionStart:Date.now(),
 };
 let pollHandle = null, consolePoll = null;
 function clearPoll(){ if(pollHandle){ clearInterval(pollHandle); pollHandle=null; } }
@@ -286,6 +329,7 @@ function mapProfile(r){
     id:r.id, username:r.username, name:r.name||r.username, color:r.color||'#888',
     roles: Array.isArray(r.roles)?r.roles:[], banned: !!r.banned,
     timeoutUntil: r.timeout_until ? new Date(r.timeout_until).getTime() : 0,
+    kickedAt: r.kicked_at ? new Date(r.kicked_at).getTime() : 0,
     joinedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
   };
 }
@@ -474,11 +518,15 @@ async function doLogout(){
 
 /* ================= Data loaders ================= */
 async function loadDirectory(){
-  const { data } = await sb.from('profiles').select('id,username,name,color,roles,banned,timeout_until,created_at,last_seen');
+  const { data } = await sb.from('profiles').select('id,username,name,color,roles,banned,timeout_until,kicked_at,created_at,last_seen');
   const dir = {};
   (data||[]).forEach(r => dir[r.id] = mapProfile(r));
   state.directory = dir;
   if (state.me && dir[state.me.id]) state.me = dir[state.me.id];
+}
+async function loadRoles(){
+  const { data } = await sb.from('roles').select('*').order('rank',{ascending:true});
+  state.roles = (data||[]).map(r => ({ id:r.id, label:r.label, color:r.color||'#888', pulse:!!r.pulse, rank:r.rank||100, permissions:Array.isArray(r.permissions)?r.permissions:[], system:!!r.system }));
 }
 async function loadChannels(){
   const { data } = await sb.from('channels').select('*').order('created_at',{ascending:true});
@@ -512,7 +560,9 @@ async function loadLikes(){
 /* ================= After auth ================= */
 async function afterAuth(){
   await loadDirectory();
+  await loadRoles();
   if (state.me.banned){ renderBanScreen(); return; }
+  state.sessionStart = Date.now();
   await loadAvatars();
   await loadChannels();
   await loadThreads();
@@ -536,7 +586,7 @@ function renderShell(){
       </div>
       <div class="who">
         <span class="online-count"><span class="dot"></span><span id="onlineCount">1</span> online</span>
-        <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${isDeveloperUser(state.me.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
+        <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${canOpenConsole(state.me.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
         <button class="profile-pill" onclick="openProfile(state.me.id)">
           <span class="avatar" id="pillAvatar" style="background:${state.me.color}">${avatarInner(state.me.id)}</span>
           <span id="pillName">${esc(state.me.name)}</span><span id="pillRoleTags">${roleTags(state.me.id)}</span>
@@ -584,13 +634,25 @@ async function heartbeat(){
   if (!state.me) return;
   await sb.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', state.me.id);
   await loadDirectory();
+  await loadRoles();
   if (state.me.banned){ renderBanScreen(); return; }
+  if (state.me.kickedAt && state.me.kickedAt > state.sessionStart){ renderKickScreen(); return; }
   await loadAvatars();
   const since = new Date(Date.now()-90000).toISOString();
   const { count } = await sb.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen', since);
   const el = document.getElementById('onlineCount'); if (el) el.textContent = count||1;
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
-  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = isDeveloperUser(state.me.id)?'flex':'none';
+  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = canOpenConsole(state.me.id)?'flex':'none';
+}
+
+function renderKickScreen(){
+  clearPoll();
+  if (state.heartbeatHandle){ clearInterval(state.heartbeatHandle); state.heartbeatHandle=null; }
+  document.querySelectorAll('.console-overlay,.modal-overlay').forEach(o=>o.remove());
+  app.innerHTML = `<div class="onboard-wrap"><div class="onboard-card" style="text-align:center;">
+    <div class="onboard-icon" style="color:var(--amber);display:flex;justify-content:center;">${shieldIcon(30)}</div>
+    <h1>You were kicked</h1><p>A moderator removed you from the session. You can log back in.</p>
+    <button class="primary-submit" onclick="doLogout()">Back to login</button></div></div>`;
 }
 
 function renderBanScreen(){
@@ -851,8 +913,8 @@ async function toggleLike(targetId){
 /* ================= Admin console ================= */
 const TIMEOUT_OPTIONS = [ {mins:5,label:'5m'}, {mins:60,label:'1h'}, {mins:1440,label:'24h'} ];
 async function openConsole(){
-  if (!isDeveloperUser(state.me.id)) return;
-  await loadDirectory();
+  if (!canOpenConsole(state.me.id)) return;
+  await Promise.all([loadDirectory(), loadRoles(), loadAvatars()]);
   if (!document.querySelector('.console-overlay')){
     const o = document.createElement('div'); o.className='console-overlay'; o.id='consoleOverlay';
     o.addEventListener('click', e=>{ if(e.target===o) closeConsole(); });
@@ -862,7 +924,8 @@ async function openConsole(){
   if (consolePoll) clearInterval(consolePoll);
   consolePoll = setInterval(async ()=>{
     if (!document.querySelector('.console-overlay')){ clearInterval(consolePoll); consolePoll=null; return; }
-    await loadDirectory(); renderConsole(true);
+    if (document.querySelector('.modal-overlay')) return; // don't refresh under an open editor
+    await Promise.all([loadDirectory(), loadRoles()]); renderConsole(true);
   }, 8000);
 }
 function closeConsole(){ if (consolePoll){ clearInterval(consolePoll); consolePoll=null; } const o=document.querySelector('.console-overlay'); if(o) o.remove(); }
@@ -871,18 +934,22 @@ function renderConsole(preserve){
   const overlay = document.querySelector('.console-overlay'); if (!overlay) return;
   const prev = preserve ? (document.getElementById('consoleSearch')?.value||'') : '';
   const q = prev.trim().toLowerCase();
+  const rankOf = u => { let best = 999; (u.roles||[]).forEach(rid=>{ const r=roleDef(rid); if(r&&r.rank<best) best=r.rank; }); return best; };
   const users = Object.values(state.directory)
     .filter(u=>!q || (u.name||'').toLowerCase().includes(q) || (u.username||'').toLowerCase().includes(q))
-    .sort((a,b)=>{ const rank=u=>u.roles.includes('developer')?0:u.roles.includes('admin')?1:2; return rank(a)-rank(b) || (a.name||'').localeCompare(b.name||''); });
+    .sort((a,b)=> rankOf(a)-rankOf(b) || (a.name||'').localeCompare(b.name||''));
+  const canManageRoles = can(state.me.id,'create_roles');
   overlay.innerHTML = `<div class="console-card">
-    <div class="console-head"><h2>${shieldIcon(20)} Admin console</h2>
+    <div class="console-head"><h2>${shieldIcon(20)} Console</h2>
       <button class="console-close" onclick="closeConsole()" aria-label="Close">&times;</button></div>
     <div class="console-body">
+      ${canManageRoles?`<div class="console-toolbar"><button class="primary-btn" onclick="openRoleManager()">Manage roles</button></div>`:''}
       <input id="consoleSearch" class="console-search" placeholder="Search people by name or @username" value="${esc(prev)}" oninput="renderConsole(true)">
       ${users.map(userRowHtml).join('') || '<div class="empty-state"><p>No people match that search.</p></div>'}
     </div></div>`;
   if (preserve){ const s=document.getElementById('consoleSearch'); if(s){ s.focus(); s.setSelectionRange(s.value.length,s.value.length); } }
 }
+
 function userRowHtml(u){
   const isMe = u.id===state.me.id;
   const banned = !!u.banned;
@@ -890,31 +957,61 @@ function userRowHtml(u){
   const status = banned?`<span class="user-status banned">BANNED</span>`
     : remaining?`<span class="user-status timed">TIMED OUT &middot; ${fmtRemaining(remaining)} left</span>`
     : `<span class="user-status active">ACTIVE</span>`;
-  const roleChips = ROLE_DEFS.map(r=>{
-    const on = u.roles.includes(r.id); const lock = isMe && r.id==='developer';
-    const chipKind = r.id==='admin'?'role-admin-chip':r.id==='developer'?'role-dev-chip':'';
-    return `<button class="chip ${on?'on':''} ${chipKind} ${lock?'disabled':''}" ${lock?'title="You can&apos;t remove your own developer role"':`onclick="toggleRole('${u.id}','${r.id}')"`}>${r.label}</button>`;
-  }).join('');
-  let mod;
-  if (isMe){ mod = `<div class="self-note">Moderation actions are disabled on your own account.</div>`; }
-  else {
-    const tchips = remaining
-      ? `<button class="chip" onclick="clearUserTimeout('${u.id}')">Remove timeout</button>`
-      : TIMEOUT_OPTIONS.map(o=>`<button class="chip" onclick="timeoutUser('${u.id}',${o.mins})">Timeout ${o.label}</button>`).join('');
-    mod = `<div class="ctl-label">TIMEOUT</div><div class="ctl-row">${tchips}</div>
-      <div class="ctl-label">ACCESS</div><div class="ctl-row">
+
+  const meCanRoles = can(state.me.id,'manage_roles');
+  const meCanDev   = can(state.me.id,'create_roles'); // only top-tier may grant developer
+  const meCanBan   = can(state.me.id,'ban');
+  const meCanKick  = can(state.me.id,'kick');
+  const meCanTime  = can(state.me.id,'timeout');
+  const meCanIdent = can(state.me.id,'manage_users');
+
+  let sections = '';
+
+  if (meCanIdent){
+    sections += `<div class="ctl-label">IDENTITY</div><div class="ctl-row"><button class="chip" onclick="editUserIdentity('${u.id}')">Edit username &amp; name</button></div>`;
+  }
+
+  if (meCanRoles){
+    const chips = rolesSorted().map(r=>{
+      const on = (u.roles||[]).includes(r.id);
+      const lockSelfDev = isMe && r.id==='developer';
+      const needsDev = r.id==='developer' && !meCanDev;
+      const disabled = lockSelfDev || needsDev;
+      const style = on ? `style="background:${r.color};border-color:${r.color};color:${readableText(r.color)};"` : '';
+      const title = lockSelfDev ? 'title="You can&apos;t remove your own developer role"' : needsDev ? 'title="Only a developer can grant this"' : '';
+      return `<button class="chip ${on?'on':''} ${disabled?'disabled':''}" ${style} ${disabled?title:`onclick="toggleRole('${u.id}','${r.id}')"`}>${esc(r.label)}</button>`;
+    }).join('');
+    sections += `<div class="ctl-label">ROLES</div><div class="ctl-row">${chips}</div>`;
+  }
+
+  if (!isMe && (meCanTime || meCanKick)){
+    let row = '';
+    if (meCanTime){
+      row += remaining
+        ? `<button class="chip" onclick="clearUserTimeout('${u.id}')">Remove timeout</button>`
+        : TIMEOUT_OPTIONS.map(o=>`<button class="chip" onclick="timeoutUser('${u.id}',${o.mins})">Timeout ${o.label}</button>`).join('');
+    }
+    if (meCanKick){ row += `<button class="chip" onclick="kickUser('${u.id}')">Kick</button>`; }
+    sections += `<div class="ctl-label">SESSION</div><div class="ctl-row">${row}</div>`;
+  }
+
+  if (!isMe && meCanBan){
+    sections += `<div class="ctl-label">ACCESS</div><div class="ctl-row">
       ${banned?`<button class="chip" onclick="setBan('${u.id}',false)">Unban</button>`:`<button class="chip danger" onclick="setBan('${u.id}',true)">Ban</button>`}</div>`;
   }
+
+  if (isMe && !sections){ sections = `<div class="self-note">Your own moderation actions are limited here.</div>`; }
+  else if (isMe){ sections += `<div class="self-note" style="margin-top:10px;">Ban / kick / timeout are disabled on your own account.</div>`; }
+
   return `<div class="user-row ${banned?'is-banned':''}"><div class="user-row-top">
     ${avatarHtml(u.id)}
     <span class="uname">${esc(u.name)}${u.username?` <span style="color:var(--text-dim);font-weight:400;font-family:var(--font-mono);font-size:11px;">@${esc(u.username)}</span>`:''}${isMe?' <span style="color:var(--text-dim);font-weight:400;">(you)</span>':''}</span>
     ${status}</div>
-    <div class="ctl-label">IDENTITY</div><div class="ctl-row"><button class="chip" onclick="editUserIdentity('${u.id}')">Edit username &amp; name</button></div>
-    <div class="ctl-label">ROLES</div><div class="ctl-row">${roleChips}</div>${mod}</div>`;
+    ${sections}</div>`;
 }
 
 function editUserIdentity(userId){
-  if (!isDeveloperUser(state.me.id)) return;
+  if (!can(state.me.id,'manage_users')) return;
   const u = state.directory[userId]; if (!u) return;
   const o = document.createElement('div'); o.className='modal-overlay';
   o.innerHTML = `<div class="modal-card"><h3>Edit identity</h3>
@@ -952,28 +1049,135 @@ async function saveUserIdentity(userId){
   await afterConsoleMutation();
 }
 
+/* ---------- Role manager ---------- */
+function openRoleManager(){
+  if (!can(state.me.id,'create_roles')) return;
+  renderRoleManager();
+}
+function renderRoleManager(){
+  document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card" style="max-width:420px;">
+    <h3>Roles</h3>
+    <div style="max-height:46vh;overflow-y:auto;margin-bottom:14px;">
+      ${rolesSorted().map(r=>`
+        <div class="role-mgr-role">
+          <div class="role-mgr-head">
+            <span class="role-tag" style="${roleTagStyle(r)}">${esc(r.label)}</span>
+            <span style="flex:1"></span>
+            <button class="chip" onclick="editRole('${r.id}')">Edit</button>
+            ${r.system?'':`<button class="chip danger" onclick="deleteRole('${r.id}')">Delete</button>`}
+          </div>
+          <div class="role-mgr-perms">${(r.permissions||[]).includes('all') ? 'all permissions' : ((r.permissions||[]).map(p=>{const d=PERM_DEFS.find(x=>x.id===p);return d?d.label:p;}).join(' &middot; ') || 'no permissions')}</div>
+        </div>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Close</button>
+      <button class="primary-btn" onclick="editRole('')">+ New role</button>
+    </div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o) o.remove(); });
+}
+function editRole(roleId){
+  const existing = roleId ? roleDef(roleId) : null;
+  const color = existing ? existing.color : '#7a5cff';
+  const label = existing ? existing.label : '';
+  const pulse = existing ? existing.pulse : false;
+  const perms = existing ? (existing.permissions||[]) : [];
+  const isAll = perms.includes('all');
+  document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card" style="max-width:420px;">
+    <h3>${existing?'Edit role':'New role'}</h3>
+    <div class="field-row">
+      <input id="roleLabel" type="text" placeholder="Badge text (e.g. MOD)" value="${esc(label)}" maxlength="14" ${existing&&existing.system?'disabled':''}>
+      <input id="roleColor" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(color)?color:'#7a5cff'}">
+    </div>
+    <label class="toggle-line"><input type="checkbox" id="rolePulse" ${pulse?'checked':''}> Glowing / pulsing badge</label>
+    <div class="ctl-label" style="margin-top:0;">PERMISSIONS</div>
+    ${existing&&existing.system&&isAll?`<div class="self-note" style="margin-bottom:8px;">This is a system role with all permissions; permissions are locked.</div>`:''}
+    <div class="perm-grid">
+      ${PERM_DEFS.map(p=>`<label><input type="checkbox" class="permbox" value="${p.id}" ${perms.includes(p.id)||isAll?'checked':''} ${isAll?'disabled':''}> ${p.label}</label>`).join('')}
+    </div>
+    <div id="roleErr" class="auth-error" style="margin:6px 0 8px;"></div>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="renderRoleManager()">Back</button>
+      <button class="primary-btn" onclick="saveRole('${roleId}')">Save</button>
+    </div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o){ o.remove(); renderRoleManager(); } });
+}
+async function saveRole(roleId){
+  const err = document.getElementById('roleErr');
+  const label = (document.getElementById('roleLabel').value||'').trim();
+  const color = document.getElementById('roleColor').value || '#7a5cff';
+  const pulse = document.getElementById('rolePulse').checked;
+  const perms = Array.from(document.querySelectorAll('.permbox')).filter(b=>b.checked && !b.disabled).map(b=>b.value);
+  const existing = roleId ? roleDef(roleId) : null;
+  if (!existing || !existing.system){
+    if (label.length < 1){ err.textContent='Give the role a badge label.'; return; }
+  }
+  err.textContent='Saving…';
+  let payload;
+  if (existing){
+    payload = { label: existing.system ? existing.label : label, color, pulse };
+    if (!(existing.system && (existing.permissions||[]).includes('all'))) payload.permissions = perms;
+    const { error } = await sb.from('roles').update(payload).eq('id', existing.id);
+    if (error){ err.textContent = error.message; return; }
+  } else {
+    let id = slugify(label);
+    if (state.roles.some(r=>r.id===id)) id += '-'+Math.random().toString(36).slice(2,5);
+    const maxRank = state.roles.reduce((m,r)=>Math.max(m,r.rank),0);
+    const { error } = await sb.from('roles').insert({ id, label, color, pulse, permissions: perms, rank: maxRank+1, system:false });
+    if (error){ err.textContent = error.message; return; }
+  }
+  await loadRoles();
+  renderRoleManager();
+  renderConsole(true);
+}
+async function deleteRole(roleId){
+  const r = roleDef(roleId); if (!r || r.system) return;
+  const { error } = await sb.from('roles').delete().eq('id', roleId);
+  if (error){ showNotice('Could not delete', esc(error.message)); return; }
+  // strip the role from anyone who had it
+  const holders = Object.values(state.directory).filter(u=>(u.roles||[]).includes(roleId));
+  for (const u of holders){ await sb.from('profiles').update({ roles: u.roles.filter(x=>x!==roleId) }).eq('id', u.id); }
+  await Promise.all([loadRoles(), loadDirectory()]);
+  renderRoleManager(); renderConsole(true);
+}
+
+async function kickUser(userId){
+  if (userId===state.me.id || !can(state.me.id,'kick')) return;
+  const { error } = await sb.from('profiles').update({ kicked_at: new Date().toISOString() }).eq('id', userId);
+  if (error){ showNotice('Action failed', esc(error.message)); return; }
+  await afterConsoleMutation();
+}
+
 async function toggleRole(userId, roleId){
+  if (!can(state.me.id,'manage_roles')) return;
   if (userId===state.me.id && roleId==='developer') return;
+  if (roleId==='developer' && !can(state.me.id,'create_roles')) return;
   const u = state.directory[userId]; if (!u) return;
-  const roles = u.roles.slice();
+  const roles = (u.roles||[]).slice();
   const i = roles.indexOf(roleId); if (i===-1) roles.push(roleId); else roles.splice(i,1);
   const { error } = await sb.from('profiles').update({ roles }).eq('id', userId);
   if (error){ showNotice('Action failed', esc(error.message)); return; }
   await afterConsoleMutation();
 }
 async function setBan(userId, banned){
-  if (userId===state.me.id) return;
+  if (userId===state.me.id || !can(state.me.id,'ban')) return;
   const { error } = await sb.from('profiles').update({ banned }).eq('id', userId);
   if (error){ showNotice('Action failed', esc(error.message)); return; }
   await afterConsoleMutation();
 }
 async function timeoutUser(userId, minutes){
-  if (userId===state.me.id) return;
+  if (userId===state.me.id || !can(state.me.id,'timeout')) return;
   const { error } = await sb.from('profiles').update({ timeout_until: new Date(Date.now()+minutes*60000).toISOString() }).eq('id', userId);
   if (error){ showNotice('Action failed', esc(error.message)); return; }
   await afterConsoleMutation();
 }
 async function clearUserTimeout(userId){
+  if (!can(state.me.id,'timeout')) return;
   const { error } = await sb.from('profiles').update({ timeout_until: null }).eq('id', userId);
   if (error){ showNotice('Action failed', esc(error.message)); return; }
   await afterConsoleMutation();
@@ -981,7 +1185,7 @@ async function clearUserTimeout(userId){
 async function afterConsoleMutation(){
   await loadDirectory(); renderConsole(true);
   const pt = document.getElementById('pillRoleTags'); if (pt) pt.innerHTML = roleTags(state.me.id);
-  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = isDeveloperUser(state.me.id)?'flex':'none';
+  const cb = document.getElementById('consoleBtn'); if (cb) cb.style.display = canOpenConsole(state.me.id)?'flex':'none';
 }
 
 /* ================= Go ================= */
