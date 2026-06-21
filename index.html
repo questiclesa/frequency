@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frequency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#181c20;
+    --surface:#21262d;
+    --surface-2:#2a313a;
+    --border:#384049;
+    --text:#ece9e2;
+    --text-dim:#8b929b;
+    --amber:#ff9d45;
+    --teal:#4fc1b8;
+    --danger:#e2614d;
+    --font-display:'Big Shoulders Display',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font-body);height:100vh;overflow:hidden;}
+  button,input,textarea{font-family:inherit;}
+  button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;}
+
+  #app{height:100vh;display:flex;flex-direction:column;}
+
+  /* ---------- Auth ---------- */
+  .onboard-wrap{height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%, #232a32 0%, var(--bg) 60%);padding:24px;overflow-y:auto;}
+  .onboard-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .onboard-icon{color:var(--amber);margin-bottom:14px;}
+  .onboard-card h1{font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:.02em;margin:0 0 6px;}
+  .onboard-card p{color:var(--text-dim);font-size:14px;line-height:1.5;margin:0 0 20px;}
+  .onboard-card input{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:11px 14px;font-size:15px;margin-bottom:12px;}
+  .onboard-card button.primary-submit{width:100%;background:var(--amber);color:#1a1408;border:none;border-radius:8px;font-weight:700;font-family:var(--font-mono);letter-spacing:.04em;font-size:13px;padding:12px 0;cursor:pointer;transition:filter .15s;}
+  .onboard-card button.primary-submit:hover{filter:brightness(1.08);}
+  .onboard-note{font-size:12px;color:var(--text-dim);margin-top:14px;line-height:1.5;}
+  .auth-tabs{display:flex;gap:8px;margin-bottom:18px;}
+  .auth-tab{flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:var(--font-mono);letter-spacing:.03em;}
+  .auth-tab.active{background:var(--amber);color:#1a1408;border-color:var(--amber);}
+  .auth-error{color:var(--danger);font-size:12px;min-height:16px;margin:-2px 0 10px;line-height:1.4;}
+
+  /* ---------- Topbar ---------- */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-weight:700;font-size:20px;letter-spacing:.03em;color:var(--text);}
+  .brand svg{color:var(--amber);}
+
+  .tab-switch{position:relative;display:flex;background:var(--surface-2);border-radius:999px;padding:4px;gap:4px;}
+  .tab-switch button{position:relative;z-index:1;width:100px;text-align:center;border:none;background:transparent;color:var(--text-dim);font-family:var(--font-mono);font-weight:600;font-size:11px;letter-spacing:.06em;padding:9px 0;border-radius:999px;cursor:pointer;transition:color .25s;}
+  .tab-switch button.active{color:#15181b;}
+  .tab-indicator{position:absolute;top:4px;left:4px;height:calc(100% - 8px);width:100px;background:var(--amber);border-radius:999px;transition:transform .3s cubic-bezier(.4,0,.2,1);box-shadow:0 0 16px rgba(255,157,69,.45);}
+  .tab-indicator.pos1{transform:translateX(104px);}
+  .tab-indicator.pos2{transform:translateX(208px);}
+  .tab-pulse{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-left:5px;animation:pulse 1.6s infinite;vertical-align:middle;}
+
+  .who{display:flex;align-items:center;gap:16px;}
+  .online-count{display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);display:inline-block;animation:pulse 1.8s infinite;}
+  .profile-pill{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;color:var(--text);font-size:13px;}
+  .avatar{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:600;font-size:11px;color:#15181b;flex-shrink:0;}
+
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+  .role-tag{display:inline-flex;align-items:center;margin-left:6px;font-family:var(--font-mono);font-size:9px;font-weight:600;letter-spacing:.1em;color:#fff;border:1px solid transparent;border-radius:4px;padding:2px 6px;vertical-align:middle;}
+  .role-tag.lg{font-size:11px;padding:3px 9px;margin-left:10px;}
+  .role-tag.role-admin{background:var(--danger);border-color:#f08a76;animation:adminPulse 1.4s ease-in-out infinite;}
+  .role-tag.role-mod{background:#3b6fd4;border-color:#6f9bf0;}
+  .role-tag.role-vip{background:var(--amber);border-color:#ffc488;color:#1a1408;}
+  @keyframes adminPulse{0%,100%{box-shadow:0 0 0 0 rgba(226,97,77,.55);opacity:1;}50%{box-shadow:0 0 11px 2px rgba(226,97,77,.75);opacity:.72;}}
+
+  /* ---------- Console ---------- */
+  .console-btn{background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:8px;font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.06em;padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .console-btn:hover{background:rgba(226,97,77,.12);}
+  .console-overlay{position:fixed;inset:0;background:rgba(8,10,12,.72);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;}
+  .console-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:680px;box-shadow:0 24px 70px rgba(0,0,0,.5);}
+  .console-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);}
+  .console-head h2{font-family:var(--font-display);font-size:24px;font-weight:700;margin:0;display:flex;align-items:center;gap:9px;}
+  .console-head h2 svg{color:var(--danger);}
+  .console-close{background:none;border:none;color:var(--text-dim);font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;}
+  .console-close:hover{color:var(--text);}
+  .console-body{padding:14px 24px 24px;}
+  .console-search{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:14px;}
+  .user-row{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;}
+  .user-row.is-banned{border-color:var(--danger);}
+  .user-row-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .user-row-top .uname{font-weight:600;font-size:14px;}
+  .user-status{font-family:var(--font-mono);font-size:11px;margin-left:auto;}
+  .user-status.banned{color:var(--danger);}
+  .user-status.timed{color:var(--amber);}
+  .user-status.active{color:var(--teal);}
+  .ctl-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;color:var(--text-dim);margin:12px 0 6px;}
+  .ctl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .chip{background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);border-radius:999px;padding:6px 12px;font-size:12px;font-family:var(--font-mono);cursor:pointer;letter-spacing:.04em;}
+  .chip:hover{border-color:var(--text-dim);color:var(--text);}
+  .chip.on{background:var(--teal);border-color:var(--teal);color:#0e1f1d;font-weight:600;}
+  .chip.on.role-admin-chip{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .chip.danger{border-color:var(--danger);color:var(--danger);}
+  .chip.danger:hover{background:rgba(226,97,77,.12);}
+  .chip.disabled{opacity:.4;cursor:not-allowed;}
+  .self-note{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
+
+  main{flex:1;overflow:hidden;}
+
+  .link-name{background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;}
+  .link-name:hover{text-decoration:underline;}
+
+  /* ---------- Board ---------- */
+  .board-layout{display:grid;grid-template-columns:230px 1fr;height:100%;}
+  .channel-rail{border-right:1px solid var(--border);padding:20px 14px;overflow-y:auto;}
+  .rail-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;color:var(--text-dim);margin:0 8px 10px;}
+  .channel-item{display:block;width:100%;text-align:left;background:transparent;border:none;border-left:2px solid transparent;color:var(--text-dim);padding:9px 10px;border-radius:6px;cursor:pointer;font-size:14px;margin-bottom:2px;}
+  .channel-item:hover{background:var(--surface-2);color:var(--text);}
+  .channel-item.active{background:var(--surface-2);color:var(--text);border-left-color:var(--teal);font-weight:600;}
+  .channel-desc{display:block;font-size:11px;color:var(--text-dim);font-weight:400;margin-top:2px;}
+  .ghost-btn{width:100%;background:transparent;border:1px dashed var(--border);color:var(--text-dim);border-radius:8px;padding:9px 0;font-size:13px;cursor:pointer;margin-top:8px;}
+  .ghost-btn:hover{border-color:var(--amber);color:var(--amber);}
+
+  .board-main{padding:28px 36px;overflow-y:auto;height:100%;}
+  .board-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
+  .board-header h2{font-family:var(--font-display);font-size:28px;font-weight:700;margin:0 0 4px;}
+  .board-header p{color:var(--text-dim);font-size:14px;margin:0;}
+  .primary-btn{background:var(--amber);color:#1a1408;border:none;border-radius:8px;font-weight:700;font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;padding:11px 18px;cursor:pointer;white-space:nowrap;}
+  .primary-btn:hover{filter:brightness(1.08);}
+  .secondary-btn{background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:8px;font-size:13px;padding:9px 14px;cursor:pointer;}
+  .secondary-btn:hover{color:var(--text);border-color:var(--text-dim);}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:20px;}
+  .panel input,.panel textarea{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px;resize:vertical;}
+  .panel-actions{display:flex;gap:10px;justify-content:flex-end;}
+
+  .thread-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}
+  .thread-card:hover{border-color:var(--teal);}
+  .thread-card h3{font-family:var(--font-display);font-size:18px;font-weight:600;margin:0 0 6px;}
+  .thread-meta{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+
+  .empty-state{border:1px dashed var(--border);border-radius:12px;padding:36px 20px;text-align:center;color:var(--text-dim);}
+  .empty-state p{margin:0 0 14px;font-size:14px;}
+
+  .back-link{background:none;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;padding:0;margin-bottom:18px;}
+  .back-link:hover{color:var(--amber);}
+  .thread-title{font-family:var(--font-display);font-size:26px;font-weight:700;margin:0 0 16px;}
+
+  .post-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:12px;}
+  .post-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .post-name{font-weight:600;font-size:13px;}
+  .post-time{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+  .post-body{font-size:14px;line-height:1.6;white-space:pre-wrap;}
+  .reply-count-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;color:var(--text-dim);margin:18px 0 10px;}
+
+  /* ---------- Live chat ---------- */
+  .live-layout{display:grid;grid-template-rows:1fr auto;height:100%;}
+  .chat-stream{padding:24px 36px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+  .chat-msg{display:flex;gap:10px;align-items:flex-start;}
+  .chat-msg .avatar{width:30px;height:30px;font-size:12px;margin-top:2px;}
+  .chat-meta{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-bottom:2px;}
+  .chat-meta b{color:var(--text);font-family:var(--font-body);font-size:13px;font-weight:600;margin-right:6px;}
+  .chat-text{font-size:14px;line-height:1.5;white-space:pre-wrap;}
+  .chat-input-bar{border-top:1px solid var(--border);padding:16px 36px;display:flex;gap:12px;background:var(--surface);}
+  .chat-input-bar input{flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:11px 18px;font-size:14px;}
+  .chat-input-bar button{background:var(--teal);color:#0e1f1d;border:none;border-radius:999px;padding:0 22px;font-weight:700;font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;cursor:pointer;}
+  .chat-input-bar button:hover{filter:brightness(1.08);}
+
+  /* ---------- People / Profile ---------- */
+  .people-page{padding:28px 36px;overflow-y:auto;height:100%;max-width:640px;margin:0 auto;}
+  .people-row{display:flex;align-items:center;gap:12px;padding:13px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:border-color .15s;}
+  .people-row:hover{border-color:var(--teal);}
+  .people-row .meta{flex:1;}
+  .people-row .pname{font-weight:600;font-size:14px;}
+  .people-row .pfollowers{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:2px;}
+
+  .profile-page{padding:28px 36px;overflow-y:auto;height:100%;max-width:640px;margin:0 auto;}
+  .profile-top{display:flex;gap:18px;align-items:center;margin-bottom:18px;flex-wrap:wrap;}
+  .avatar-lg{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:700;font-size:24px;color:#15181b;flex-shrink:0;}
+  .profile-name{font-family:var(--font-display);font-size:30px;font-weight:700;margin:0;}
+  .profile-handle{font-family:var(--font-mono);font-size:13px;color:var(--text-dim);margin-top:2px;}
+  .profile-joined{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);margin-top:4px;}
+  .profile-stats{display:flex;gap:26px;margin:18px 0 22px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);flex-wrap:wrap;}
+  .profile-stats b{display:block;font-family:var(--font-display);font-size:22px;color:var(--text);font-weight:700;}
+  .profile-actions{display:flex;gap:10px;margin-bottom:26px;flex-wrap:wrap;align-items:center;}
+  .follow-btn{background:var(--teal);color:#0e1f1d;border:none;border-radius:999px;font-weight:700;font-family:var(--font-mono);font-size:12px;letter-spacing:.04em;padding:10px 20px;cursor:pointer;}
+  .follow-btn.following{background:transparent;border:1px solid var(--border);color:var(--text);}
+  .like-btn{background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:999px;padding:10px 18px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .like-btn.liked{border-color:var(--amber);color:var(--amber);}
+  .you-badge{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:999px;padding:8px 14px;}
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(10,12,14,.6);display:flex;align-items:center;justify-content:center;z-index:50;padding:24px;}
+  .modal-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px;max-width:340px;width:100%;}
+  .modal-card h3{font-family:var(--font-display);font-size:20px;margin:0 0 14px;}
+  .modal-card input{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:14px;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;}
+
+  @media (max-width:760px){
+    .board-layout{grid-template-columns:1fr;}
+    .channel-rail{display:flex;gap:8px;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:14px;white-space:nowrap;}
+    .channel-item{width:auto;}
+    .rail-label{display:none;}
+    .ghost-btn{width:auto;padding:9px 14px;margin-top:0;}
+    .board-main,.chat-stream,.chat-input-bar,.people-page,.profile-page{padding-left:18px;padding-right:18px;}
+    .topbar{padding:12px 16px;}
+    .tab-switch button{width:84px;font-size:10px;}
+    .tab-indicator{width:84px;}
+    .tab-indicator.pos1{transform:translateX(88px);}
+    .tab-indicator.pos2{transform:translateX(176px);}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ================= Storage helpers ================= */
+async function getJSON(key, shared, fallback){
+  try{
+    const res = await window.storage.get(key, shared);
+    return res ? JSON.parse(res.value) : fallback;
+  }catch(e){ return fallback; }
+}
+async function setJSON(key, value, shared){
+  try{ await window.storage.set(key, JSON.stringify(value), shared); return true; }
+  catch(e){ console.error('storage set failed', key, e); return false; }
+}
+
+/* ================= Utilities ================= */
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const PALETTE = ['#ff9d45','#4fc1b8','#e2614d','#8aa9ff','#d9c24f','#c893e0'];
+function randColor(){ return PALETTE[Math.floor(Math.random()*PALETTE.length)]; }
+function initials(name){ return ((name||'?').trim()[0] || '?').toUpperCase(); }
+function slugify(s){ return s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'channel'; }
+function relTime(ts){
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return s+'s ago';
+  const m = Math.floor(s/60); if (m < 60) return m+'m ago';
+  const h = Math.floor(m/60); if (h < 24) return h+'h ago';
+  const d = Math.floor(h/24); return d+'d ago';
+}
+function fmtDate(ts){ return new Date(ts).toLocaleDateString(undefined,{month:'short', year:'numeric'}); }
+function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(36).slice(2)); }
+function genSalt(){ return uid(); }
+async function hashPassword(password, salt){
+  const data = new TextEncoder().encode(salt + ':' + password);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function heartIcon(filled){
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="${filled?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M12 21C12 21 4 14.5 4 9.5C4 6.5 6.5 4 9.5 4C11 4 12 5 12 5C12 5 13 4 14.5 4C17.5 4 20 6.5 20 9.5C20 14.5 12 21 12 21Z"/></svg>`;
+}
+function signalIcon(size){
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/>
+    <path d="M8.5 14.5a5 5 0 0 1 7 0"/>
+    <path d="M5 11a9.9 9.9 0 0 1 14 0"/>
+  </svg>`;
+}
+function shieldIcon(size){
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>`;
+}
+const ROLE_DEFS = [
+  { id:'admin', label:'ADMIN' },
+  { id:'mod',   label:'MOD' },
+  { id:'vip',   label:'VIP' },
+];
+function getUserRoles(userId){
+  const p = state.directory[userId];
+  if (!p) return [];
+  if (Array.isArray(p.roles)) return p.roles;
+  return p.isAdmin ? ['admin'] : [];
+}
+function isAdminUser(userId){ return getUserRoles(userId).includes('admin'); }
+function roleTags(userId, large){
+  const roles = getUserRoles(userId);
+  return ROLE_DEFS.filter(r => roles.includes(r.id))
+    .map(r => `<span class="role-tag role-${r.id}${large?' lg':''}">${r.label}</span>`).join('');
+}
+
+/* ================= State ================= */
+const state = {
+  profile: null,
+  tab: 'board',
+  channels: [],
+  activeChannel: 'general',
+  threads: [],
+  view: 'list',
+  openThreadId: null,
+  posts: [],
+  chat: [],
+  presence: {},
+  directory: {},
+  follows: {},
+  likes: {},
+  profileView: null,
+  showNewThread: false,
+  showNewChannel: false,
+  heartbeatHandle: null,
+};
+let pollHandle = null;
+let consolePoll = null;
+function clearPoll(){ if(pollHandle){ clearInterval(pollHandle); pollHandle = null; } }
+function setPoll(fn, ms){ clearPoll(); pollHandle = setInterval(fn, ms); }
+
+/* ================= Boot / auth ================= */
+const app = document.getElementById('app');
+
+async function boot(){
+  const session = await getJSON('session', false, null);
+  if (session && session.profileId){
+    const directory = await getJSON('directory', true, {});
+    const profile = directory[session.profileId];
+    if (profile){
+      state.profile = profile;
+      state.directory = directory;
+      await afterAuth();
+      return;
+    }
+  }
+  renderAuth('signup');
+}
+
+function renderAuth(mode){
+  app.innerHTML = `
+    <div class="onboard-wrap">
+      <div class="onboard-card">
+        <div class="onboard-icon">${signalIcon(28)}</div>
+        <h1>Frequency</h1>
+        <p>${mode==='signup' ? 'Create an account to start posting and chatting.' : 'Sign back in to your account.'}</p>
+        <div class="auth-tabs">
+          <button class="auth-tab ${mode==='login'?'active':''}" onclick="renderAuth('login')">Log in</button>
+          <button class="auth-tab ${mode==='signup'?'active':''}" onclick="renderAuth('signup')">Sign up</button>
+        </div>
+        <input id="authUsername" placeholder="Username" maxlength="20" autocomplete="username">
+        <input id="authPassword" type="password" placeholder="Password" autocomplete="${mode==='signup'?'new-password':'current-password'}">
+        ${mode==='signup' ? `<input id="authConfirm" type="password" placeholder="Confirm password" autocomplete="new-password">` : ''}
+        <div id="authError" class="auth-error"></div>
+        <button class="primary-submit" onclick="${mode==='signup'?'submitSignup()':'submitLogin()'}">${mode==='signup'?'Create account':'Log in'}</button>
+        <div class="onboard-note">Passwords are hashed before they're stored, but this runs without a real server backend &mdash; treat it like any small community app, not a vault for a sensitive password.</div>
+      </div>
+    </div>`;
+  const submit = () => mode === 'signup' ? submitSignup() : submitLogin();
+  document.getElementById('authUsername').addEventListener('keydown', e => { if (e.key==='Enter') submit(); });
+  document.getElementById('authPassword').addEventListener('keydown', e => { if (e.key==='Enter') submit(); });
+  if (mode === 'signup') document.getElementById('authConfirm').addEventListener('keydown', e => { if (e.key==='Enter') submit(); });
+  document.getElementById('authUsername').focus();
+}
+
+async function submitSignup(){
+  const username = (document.getElementById('authUsername').value || '').trim();
+  const password = document.getElementById('authPassword').value || '';
+  const confirm = document.getElementById('authConfirm').value || '';
+  const errEl = document.getElementById('authError');
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)){ errEl.textContent = 'Usernames are 3-20 characters: letters, numbers, underscore.'; return; }
+  if (password.length < 6){ errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  if (password !== confirm){ errEl.textContent = "Passwords don't match."; return; }
+  errEl.textContent = '';
+  const key = username.toLowerCase();
+  const accounts = await getJSON('accounts', true, {});
+  if (accounts[key]){ errEl.textContent = 'That username is taken.'; return; }
+  const salt = genSalt();
+  const passwordHash = await hashPassword(password, salt);
+  const profileId = uid();
+  const directory = await getJSON('directory', true, {});
+  directory[profileId] = { id: profileId, username, name: username, color: randColor(), joinedAt: Date.now() };
+  await setJSON('directory', directory, true);
+  accounts[key] = { passwordHash, salt, profileId };
+  await setJSON('accounts', accounts, true);
+  await setJSON('session', { profileId }, false);
+  state.profile = directory[profileId];
+  state.directory = directory;
+  await afterAuth();
+}
+
+async function submitLogin(){
+  const username = (document.getElementById('authUsername').value || '').trim();
+  const password = document.getElementById('authPassword').value || '';
+  const errEl = document.getElementById('authError');
+  if (!username || !password){ errEl.textContent = 'Enter your username and password.'; return; }
+  errEl.textContent = '';
+  const key = username.toLowerCase();
+  const accounts = await getJSON('accounts', true, {});
+  const entry = accounts[key];
+  if (!entry){ errEl.textContent = 'No account with that username.'; return; }
+  const hash = await hashPassword(password, entry.salt);
+  if (hash !== entry.passwordHash){ errEl.textContent = 'Incorrect password.'; return; }
+  const directory = await getJSON('directory', true, {});
+  let profile = directory[entry.profileId];
+  if (!profile){
+    profile = { id: entry.profileId, username, name: username, color: randColor(), joinedAt: Date.now() };
+    directory[entry.profileId] = profile;
+    await setJSON('directory', directory, true);
+  }
+  await setJSON('session', { profileId: entry.profileId }, false);
+  state.profile = profile;
+  state.directory = directory;
+  await afterAuth();
+}
+
+function confirmLogout(){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <h3>Log out?</h3>
+      <p style="color:var(--text-dim);font-size:13px;margin:0 0 18px;">You'll need your username and password to sign back in.</p>
+      <div class="modal-actions">
+        <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="primary-btn" onclick="doLogout()">Log out</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function doLogout(){
+  clearPoll();
+  if (state.heartbeatHandle){ clearInterval(state.heartbeatHandle); state.heartbeatHandle = null; }
+  if (consolePoll){ clearInterval(consolePoll); consolePoll = null; }
+  try{ await window.storage.delete('session', false); }catch(e){}
+  state.profile = null;
+  state.profileView = null;
+  document.querySelectorAll('.modal-overlay,.console-overlay').forEach(o => o.remove());
+  renderAuth('login');
+}
+
+async function ensureChannels(){
+  let channels = await getJSON('channels', true, null);
+  if (!channels){
+    channels = [
+      {id:'general', name:'General', desc:'Anything goes.'},
+      {id:'intros', name:'Introductions', desc:'New here? Say hello.'},
+      {id:'help', name:'Help', desc:'Ask, answer, troubleshoot.'}
+    ];
+    await setJSON('channels', channels, true);
+  }
+  return channels;
+}
+
+async function afterAuth(){
+  await ensureAdmin();
+  // refresh own record from normalized directory
+  const me = state.directory[state.profile.id];
+  if (me) state.profile = me;
+  if (me && me.banned){ renderBanScreen(); return; }
+  renderShell();
+  state.channels = await ensureChannels();
+  await refreshThreads();
+  heartbeat();
+  if (state.heartbeatHandle) clearInterval(state.heartbeatHandle);
+  state.heartbeatHandle = setInterval(heartbeat, 15000);
+  setActiveTab('board');
+}
+
+async function ensureAdmin(){
+  const directory = await getJSON('directory', true, {});
+  const entries = Object.values(directory);
+  // normalize each entry to the role/moderation schema
+  for (const p of entries){
+    if (!Array.isArray(p.roles)) p.roles = p.isAdmin ? ['admin'] : [];
+    if (typeof p.banned !== 'boolean') p.banned = false;
+    if (typeof p.timeoutUntil !== 'number') p.timeoutUntil = 0;
+  }
+  if (entries.length){
+    const hasAdmin = entries.some(p => p.roles.includes('admin'));
+    if (!hasAdmin){
+      const founder = entries.slice().sort((a,b) => (a.joinedAt||0) - (b.joinedAt||0))[0];
+      if (founder && !founder.roles.includes('admin')) founder.roles.push('admin');
+    }
+  }
+  await setJSON('directory', directory, true);
+  state.directory = directory;
+}
+
+/* ---------- moderation state helpers ---------- */
+function userOf(id){ return state.directory[id] || null; }
+function isBanned(id){ const u = userOf(id); return !!(u && u.banned); }
+function timeoutRemaining(id){ const u = userOf(id); if (!u || !u.timeoutUntil) return 0; return Math.max(0, u.timeoutUntil - Date.now()); }
+function fmtRemaining(ms){
+  const m = Math.ceil(ms/60000);
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m/60), rem = m%60; return rem ? h+'h '+rem+'m' : h+'h';
+}
+
+/* ================= Shell / header ================= */
+function renderShell(){
+  app.innerHTML = `
+    <div class="topbar">
+      <div class="brand">${signalIcon(20)} FREQUENCY</div>
+      <div class="tab-switch">
+        <div id="tabIndicator" class="tab-indicator"></div>
+        <button id="tabBoardBtn" class="tab active" onclick="setActiveTab('board')">BOARD</button>
+        <button id="tabLiveBtn" class="tab" onclick="setActiveTab('live')">LIVE<span class="tab-pulse"></span></button>
+        <button id="tabPeopleBtn" class="tab" onclick="setActiveTab('people')">PEOPLE</button>
+      </div>
+      <div class="who">
+        <span class="online-count"><span class="dot"></span><span id="onlineCount">1</span> tuned in</span>
+        <button id="consoleBtn" class="console-btn" onclick="openConsole()" style="display:${isAdminUser(state.profile.id)?'flex':'none'}">${shieldIcon(13)} CONSOLE</button>
+        <button class="profile-pill" onclick="openProfile(state.profile.id)">
+          <span class="avatar" style="background:${state.profile.color}">${initials(state.profile.name)}</span>
+          ${esc(state.profile.name)}<span id="pillRoleTags">${roleTags(state.profile.id)}</span>
+        </button>
+      </div>
+    </div>
+    <main id="main"></main>
+  `;
+}
+
+function setActiveTab(tab){
+  state.tab = tab;
+  state.profileView = null;
+  document.getElementById('tabBoardBtn').classList.toggle('active', tab==='board');
+  document.getElementById('tabLiveBtn').classList.toggle('active', tab==='live');
+  document.getElementById('tabPeopleBtn').classList.toggle('active', tab==='people');
+  const ind = document.getElementById('tabIndicator');
+  ind.className = 'tab-indicator' + (tab==='live' ? ' pos1' : tab==='people' ? ' pos2' : '');
+  if (tab === 'board'){ state.view = 'list'; renderBoard(); }
+  else if (tab === 'live'){ renderLive(); }
+  else { renderPeople(); }
+}
+
+function openProfileEditor(){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <h3>Edit display name</h3>
+      <input id="editNameInput" value="${esc(state.profile.name)}" maxlength="24">
+      <div class="modal-actions">
+        <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="primary-btn" onclick="saveProfileName()">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function saveProfileName(){
+  const val = (document.getElementById('editNameInput').value || '').trim();
+  if (!val) return;
+  const directory = await getJSON('directory', true, {});
+  if (directory[state.profile.id]) directory[state.profile.id].name = val;
+  else directory[state.profile.id] = { ...state.profile, name: val };
+  await setJSON('directory', directory, true);
+  state.profile.name = val;
+  state.directory = directory;
+  document.querySelector('.modal-overlay').remove();
+  renderShell();
+  if (state.profileView) renderProfilePage();
+  else if (state.tab === 'board') renderBoard();
+  else if (state.tab === 'live') renderLive();
+  else renderPeople();
+}
+
+/* ================= Presence ================= */
+async function heartbeat(){
+  if (!state.profile) return;
+  let presence = await getJSON('presence', true, {});
+  const now = Date.now();
+  presence[state.profile.id] = { name: state.profile.name, color: state.profile.color, lastSeen: now };
+  for (const k in presence){ if (now - presence[k].lastSeen > 90000) delete presence[k]; }
+  await setJSON('presence', presence, true);
+  state.presence = presence;
+  state.directory = await getJSON('directory', true, state.directory);
+  const me = state.directory[state.profile.id];
+  if (me){ state.profile.roles = me.roles; state.profile.name = me.name; state.profile.color = me.color; }
+  // enforce a ban handed down by another admin while we're online
+  if (me && me.banned){ renderBanScreen(); return; }
+  const el = document.getElementById('onlineCount');
+  if (el) el.textContent = Object.keys(presence).length;
+  const pillTags = document.getElementById('pillRoleTags');
+  if (pillTags) pillTags.innerHTML = roleTags(state.profile.id);
+  const cBtn = document.getElementById('consoleBtn');
+  if (cBtn) cBtn.style.display = isAdminUser(state.profile.id) ? 'flex' : 'none';
+}
+
+function renderBanScreen(){
+  clearPoll();
+  if (state.heartbeatHandle){ clearInterval(state.heartbeatHandle); state.heartbeatHandle = null; }
+  document.querySelectorAll('.console-overlay,.modal-overlay').forEach(o => o.remove());
+  app.innerHTML = `
+    <div class="onboard-wrap">
+      <div class="onboard-card" style="text-align:center;">
+        <div class="onboard-icon" style="color:var(--danger);display:flex;justify-content:center;">${shieldIcon(30)}</div>
+        <h1>Account banned</h1>
+        <p>An admin has banned this account from Frequency. If you think this is a mistake, reach out to the board's admin.</p>
+        <button class="primary-submit" onclick="doLogout()">Log out</button>
+      </div>
+    </div>`;
+}
+
+/* returns true (and notifies) if the current user may NOT post right now */
+async function postingBlocked(){
+  const dir = await getJSON('directory', true, {});
+  state.directory = dir;
+  const me = dir[state.profile.id];
+  if (me && me.banned){ renderBanScreen(); return true; }
+  if (me && me.timeoutUntil && me.timeoutUntil > Date.now()){
+    showNotice('You&rsquo;re timed out', `An admin has paused your posting. It lifts in ${fmtRemaining(me.timeoutUntil - Date.now())}.`);
+    return true;
+  }
+  return false;
+}
+
+function showNotice(title, msg){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <h3>${title}</h3>
+      <p style="color:var(--text-dim);font-size:13px;line-height:1.5;margin:0 0 18px;">${msg}</p>
+      <div class="modal-actions"><button class="primary-btn" onclick="this.closest('.modal-overlay').remove()">OK</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+/* ================= Board: data ================= */
+async function refreshThreads(){ state.threads = await getJSON('threads', true, []); }
+async function refreshPosts(threadId){ state.posts = await getJSON('posts:'+threadId, true, []); }
+
+async function createChannel(name, desc){
+  let id = slugify(name);
+  if (state.channels.some(c => c.id === id)) id += '-' + Math.random().toString(36).slice(2,5);
+  state.channels.push({ id, name, desc: desc || '' });
+  await setJSON('channels', state.channels, true);
+}
+
+async function createThread(channelId, title, body){
+  const threads = await getJSON('threads', true, []);
+  const id = uid();
+  const now = Date.now();
+  threads.unshift({
+    id, channelId, title,
+    author: state.profile.name, authorColor: state.profile.color, authorId: state.profile.id,
+    createdAt: now, lastActivity: now, replyCount: 0
+  });
+  await setJSON('threads', threads, true);
+  await setJSON('posts:'+id, [{
+    id: uid(), author: state.profile.name, authorColor: state.profile.color, authorId: state.profile.id,
+    text: body, createdAt: now
+  }], true);
+  state.threads = threads;
+  return id;
+}
+
+async function addReply(threadId, text){
+  const posts = await getJSON('posts:'+threadId, true, []);
+  posts.push({ id: uid(), author: state.profile.name, authorColor: state.profile.color, authorId: state.profile.id, text, createdAt: Date.now() });
+  await setJSON('posts:'+threadId, posts, true);
+  const threads = await getJSON('threads', true, []);
+  const t = threads.find(t => t.id === threadId);
+  if (t){ t.replyCount = posts.length - 1; t.lastActivity = Date.now(); await setJSON('threads', threads, true); state.threads = threads; }
+  state.posts = posts;
+}
+
+/* ================= Board: render ================= */
+function renderBoard(){
+  setPoll(async () => {
+    if (state.view === 'list'){ await refreshThreads(); renderBoardList(false); }
+    else { await refreshPosts(state.openThreadId); renderThreadDetail(false); }
+  }, state.view === 'list' ? 8000 : 5000);
+
+  if (state.view === 'list') renderBoardList(true);
+  else renderThreadDetail(true);
+}
+
+function authorLink(authorId, authorName, color, extraOnclick){
+  const style = color ? `style="color:${color}"` : '';
+  return `<span class="link-name" ${style} onclick="${extraOnclick||''}openProfile('${authorId}')">${esc(authorName)}</span>${roleTags(authorId)}`;
+}
+
+function renderBoardList(full){
+  const main = document.getElementById('main');
+  const channel = state.channels.find(c => c.id === state.activeChannel) || state.channels[0];
+  const threads = state.threads.filter(t => t.channelId === channel.id).sort((a,b) => b.lastActivity - a.lastActivity);
+
+  if (!full && document.getElementById('threadList')){
+    document.getElementById('threadList').innerHTML = threadListHtml(threads, channel);
+    return;
+  }
+
+  main.innerHTML = `
+    <div class="board-layout">
+      <div class="channel-rail">
+        <div class="rail-label">CHANNELS</div>
+        ${state.channels.map(c => `
+          <button class="channel-item ${c.id===channel.id?'active':''}" onclick="selectChannel('${c.id}')">
+            ${esc(c.name)}
+            ${c.desc ? `<span class="channel-desc">${esc(c.desc)}</span>` : ''}
+          </button>
+        `).join('')}
+        <button class="ghost-btn" onclick="state.showNewChannel=!state.showNewChannel; renderBoardList(true);">+ New channel</button>
+        ${state.showNewChannel ? `
+          <div class="panel" style="margin-top:10px;">
+            <input id="newChannelName" placeholder="Channel name">
+            <input id="newChannelDesc" placeholder="One-line description (optional)">
+            <div class="panel-actions">
+              <button class="secondary-btn" onclick="state.showNewChannel=false; renderBoardList(true);">Cancel</button>
+              <button class="primary-btn" onclick="submitNewChannel()">Create</button>
+            </div>
+          </div>` : ''}
+      </div>
+      <div class="board-main">
+        <div class="board-header">
+          <div>
+            <h2>#${esc(channel.name)}</h2>
+            ${channel.desc ? `<p>${esc(channel.desc)}</p>` : ''}
+          </div>
+          <button class="primary-btn" onclick="state.showNewThread=!state.showNewThread; renderBoardList(true);">+ New thread</button>
+        </div>
+        ${state.showNewThread ? `
+          <div class="panel">
+            <input id="newThreadTitle" placeholder="Thread title">
+            <textarea id="newThreadBody" rows="4" placeholder="Write the first post..."></textarea>
+            <div class="panel-actions">
+              <button class="secondary-btn" onclick="state.showNewThread=false; renderBoardList(true);">Cancel</button>
+              <button class="primary-btn" onclick="submitNewThread('${channel.id}')">Post thread</button>
+            </div>
+          </div>` : ''}
+        <div id="threadList">${threadListHtml(threads, channel)}</div>
+      </div>
+    </div>`;
+}
+
+function threadListHtml(threads, channel){
+  if (threads.length === 0){
+    return `<div class="empty-state"><p>Nothing posted in #${esc(channel.name)} yet. Start the first thread.</p></div>`;
+  }
+  return threads.map(t => `
+    <div class="thread-card" onclick="openThread('${t.id}')">
+      <h3>${esc(t.title)}</h3>
+      <div class="thread-meta">
+        ${authorLink(t.authorId, t.author, t.authorColor, 'event.stopPropagation();')}
+        <span>${relTime(t.createdAt)}</span>
+        <span>${t.replyCount} repl${t.replyCount===1?'y':'ies'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function selectChannel(id){
+  state.activeChannel = id;
+  state.showNewThread = false;
+  state.showNewChannel = false;
+  renderBoardList(true);
+}
+
+async function submitNewChannel(){
+  const name = (document.getElementById('newChannelName').value || '').trim();
+  if (!name) return;
+  if (await postingBlocked()) return;
+  const desc = (document.getElementById('newChannelDesc').value || '').trim();
+  await createChannel(name, desc);
+  state.showNewChannel = false;
+  state.activeChannel = state.channels[state.channels.length-1].id;
+  renderBoardList(true);
+}
+
+async function submitNewThread(channelId){
+  const title = (document.getElementById('newThreadTitle').value || '').trim();
+  const body = (document.getElementById('newThreadBody').value || '').trim();
+  if (!title || !body) return;
+  if (await postingBlocked()) return;
+  state.showNewThread = false;
+  const id = await createThread(channelId, title, body);
+  openThread(id);
+}
+
+async function openThread(id){
+  state.view = 'thread';
+  state.openThreadId = id;
+  await refreshPosts(id);
+  renderBoard();
+}
+
+function backToList(){ state.view = 'list'; renderBoard(); }
+
+function renderThreadDetail(full){
+  const thread = state.threads.find(t => t.id === state.openThreadId);
+  if (!thread){ backToList(); return; }
+  const posts = state.posts;
+  const replies = posts.slice(1);
+
+  if (!full && document.getElementById('repliesList')){
+    document.getElementById('repliesList').innerHTML = repliesHtml(replies);
+    document.getElementById('replyCountLabel').textContent = replies.length + (replies.length===1?' REPLY':' REPLIES');
+    return;
+  }
+
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="board-main" style="max-width:760px;margin:0 auto;">
+      <button class="back-link" onclick="backToList()">&larr; back to #${esc((state.channels.find(c=>c.id===thread.channelId)||{}).name||'')}</button>
+      <h1 class="thread-title">${esc(thread.title)}</h1>
+      ${posts[0] ? postCardHtml(posts[0]) : ''}
+      <div class="reply-count-label" id="replyCountLabel">${replies.length}${replies.length===1?' REPLY':' REPLIES'}</div>
+      <div id="repliesList">${repliesHtml(replies)}</div>
+      <div class="panel">
+        <textarea id="replyText" rows="3" placeholder="Write a reply..."></textarea>
+        <div class="panel-actions">
+          <button class="primary-btn" onclick="submitReply('${thread.id}')">Reply</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function postCardHtml(p){
+  return `
+    <div class="post-card">
+      <div class="post-head">
+        <span class="avatar" style="background:${p.authorColor}">${initials(p.author)}</span>
+        ${authorLink(p.authorId, p.author, null)}
+        <span class="post-time">${relTime(p.createdAt)}</span>
+      </div>
+      <div class="post-body">${esc(p.text)}</div>
+    </div>`;
+}
+function repliesHtml(replies){
+  if (replies.length === 0) return `<div class="empty-state"><p>No replies yet &mdash; be the first to respond.</p></div>`;
+  return replies.map(postCardHtml).join('');
+}
+
+async function submitReply(threadId){
+  const textEl = document.getElementById('replyText');
+  const text = (textEl.value || '').trim();
+  if (!text) return;
+  if (await postingBlocked()) return;
+  textEl.value = '';
+  await addReply(threadId, text);
+  renderThreadDetail(true);
+}
+
+/* ================= Live chat ================= */
+async function refreshChat(){ state.chat = await getJSON('chat-messages', true, []); }
+
+function renderLive(){
+  setPoll(async () => { await refreshChat(); renderChatStream(false); }, 3000);
+  refreshChat().then(() => renderChatLayout());
+}
+
+function renderChatLayout(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="live-layout">
+      <div id="chatStream" class="chat-stream"></div>
+      <div class="chat-input-bar">
+        <input id="chatInput" placeholder="Say something on the wire..." maxlength="500">
+        <button onclick="submitChat()">SEND</button>
+      </div>
+    </div>`;
+  document.getElementById('chatInput').addEventListener('keydown', e => { if (e.key==='Enter') submitChat(); });
+  renderChatStream(true);
+}
+
+function renderChatStream(scrollToEnd){
+  const el = document.getElementById('chatStream');
+  if (!el) return;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  if (state.chat.length === 0){
+    el.innerHTML = `<div class="empty-state"><p>The airwaves are quiet. Say something.</p></div>`;
+    return;
+  }
+  el.innerHTML = state.chat.map(m => `
+    <div class="chat-msg">
+      <span class="avatar" style="background:${m.authorColor}">${initials(m.author)}</span>
+      <div>
+        <div class="chat-meta">${authorLink(m.authorId, m.author, null)}${relTime(m.createdAt)}</div>
+        <div class="chat-text">${esc(m.text)}</div>
+      </div>
+    </div>
+  `).join('');
+  if (scrollToEnd || nearBottom) el.scrollTop = el.scrollHeight;
+}
+
+async function submitChat(){
+  const input = document.getElementById('chatInput');
+  const text = (input.value || '').trim();
+  if (!text) return;
+  if (await postingBlocked()) return;
+  input.value = '';
+  const msgs = await getJSON('chat-messages', true, []);
+  msgs.push({ id: uid(), author: state.profile.name, authorColor: state.profile.color, authorId: state.profile.id, text, createdAt: Date.now() });
+  while (msgs.length > 200) msgs.shift();
+  await setJSON('chat-messages', msgs, true);
+  state.chat = msgs;
+  renderChatStream(true);
+}
+
+/* ================= People directory ================= */
+async function refreshPeopleData(){
+  state.directory = await getJSON('directory', true, {});
+  state.follows = await getJSON('follows', true, {});
+}
+
+function renderPeople(){
+  setPoll(async () => { await refreshPeopleData(); renderPeopleList(); }, 15000);
+  refreshPeopleData().then(renderPeopleList);
+}
+
+function renderPeopleList(){
+  const main = document.getElementById('main');
+  const people = Object.values(state.directory);
+  const others = people.filter(p => p.id !== state.profile.id)
+    .sort((a,b) => (state.follows[b.id]||[]).length - (state.follows[a.id]||[]).length || a.name.localeCompare(b.name));
+
+  main.innerHTML = `
+    <div class="people-page">
+      <div class="board-header"><div><h2>People</h2><p>Everyone who has tuned in to Frequency.</p></div></div>
+      <div class="people-row" onclick="openProfile('${state.profile.id}')">
+        <span class="avatar" style="background:${state.profile.color}">${initials(state.profile.name)}</span>
+        <div class="meta">
+          <div class="pname">${esc(state.profile.name)}${roleTags(state.profile.id)} <span style="color:var(--text-dim);font-weight:400;">(you)</span></div>
+          <div class="pfollowers">${(state.follows[state.profile.id]||[]).length} followers</div>
+        </div>
+      </div>
+      ${others.length === 0 ? `<div class="empty-state"><p>No one else has tuned in yet. Share the link to invite people.</p></div>` :
+        others.map(p => `
+          <div class="people-row" onclick="openProfile('${p.id}')">
+            <span class="avatar" style="background:${p.color}">${initials(p.name)}</span>
+            <div class="meta">
+              <div class="pname">${esc(p.name)}${roleTags(p.id)}</div>
+              <div class="pfollowers">${(state.follows[p.id]||[]).length} followers</div>
+            </div>
+          </div>
+        `).join('')}
+    </div>`;
+}
+
+/* ================= Profile page ================= */
+async function openProfile(userId){
+  state.profileView = userId;
+  await Promise.all([refreshPeopleData(), (async()=>{ state.likes = await getJSON('likes', true, {}); })()]);
+  setPoll(async () => {
+    await Promise.all([refreshPeopleData(), (async()=>{ state.likes = await getJSON('likes', true, {}); })()]);
+    if (state.profileView === userId) renderProfilePage();
+  }, 10000);
+  renderProfilePage();
+}
+
+function backFromProfile(){
+  state.profileView = null;
+  if (state.tab === 'board') renderBoard();
+  else if (state.tab === 'live') renderLive();
+  else renderPeople();
+}
+
+async function goToThreadFromProfile(threadId){
+  setActiveTab('board');
+  await openThread(threadId);
+}
+
+function renderProfilePage(){
+  const main = document.getElementById('main');
+  const userId = state.profileView;
+  const person = state.directory[userId] || (userId === state.profile.id ? state.profile : {id:userId, name:'Unknown', color:'#888', joinedAt:Date.now()});
+  const isMe = userId === state.profile.id;
+  const followerIds = state.follows[userId] || [];
+  const followingCount = Object.values(state.follows).filter(arr => arr.includes(userId)).length;
+  const likerIds = state.likes[userId] || [];
+  const isFollowing = followerIds.includes(state.profile.id);
+  const isLiked = likerIds.includes(state.profile.id);
+  const threadsByUser = state.threads.filter(t => t.authorId === userId).sort((a,b) => b.lastActivity - a.lastActivity);
+
+  main.innerHTML = `
+    <div class="profile-page">
+      <button class="back-link" onclick="backFromProfile()">&larr; back</button>
+      <div class="profile-top">
+        <div class="avatar-lg" style="background:${person.color}">${initials(person.name)}</div>
+        <div>
+          <h2 class="profile-name">${esc(person.name)}${roleTags(userId, true)}</h2>
+          ${person.username ? `<div class="profile-handle">@${esc(person.username)}</div>` : ''}
+          <div class="profile-joined">Joined ${fmtDate(person.joinedAt)}</div>
+        </div>
+      </div>
+      <div class="profile-stats">
+        <div><b>${followerIds.length}</b>followers</div>
+        <div><b>${followingCount}</b>following</div>
+        <div><b>${likerIds.length}</b>likes</div>
+        <div><b>${threadsByUser.length}</b>threads</div>
+      </div>
+      <div class="profile-actions">
+        ${isMe ? `
+          <span class="you-badge">This is you</span>
+          <button class="secondary-btn" onclick="openProfileEditor()">Edit name</button>
+          <button class="secondary-btn" onclick="confirmLogout()">Log out</button>
+        ` : `
+          <button class="follow-btn ${isFollowing?'following':''}" onclick="toggleFollow('${userId}')">${isFollowing?'Following':'Follow'}</button>
+          <button class="like-btn ${isLiked?'liked':''}" onclick="toggleLike('${userId}')">${heartIcon(isLiked)} ${likerIds.length}</button>
+        `}
+      </div>
+      <div class="reply-count-label">THREADS STARTED</div>
+      ${threadsByUser.length === 0 ? `<div class="empty-state"><p>${isMe ? "You haven't" : esc(person.name)+" hasn't"} started a thread yet.</p></div>` :
+        threadsByUser.map(t => `
+          <div class="thread-card" onclick="goToThreadFromProfile('${t.id}')">
+            <h3>${esc(t.title)}</h3>
+            <div class="thread-meta"><span>${relTime(t.createdAt)}</span><span>${t.replyCount} repl${t.replyCount===1?'y':'ies'}</span></div>
+          </div>
+        `).join('')}
+    </div>`;
+}
+
+async function toggleFollow(targetId){
+  if (targetId === state.profile.id) return;
+  const follows = await getJSON('follows', true, {});
+  const arr = follows[targetId] || [];
+  const idx = arr.indexOf(state.profile.id);
+  if (idx === -1) arr.push(state.profile.id); else arr.splice(idx, 1);
+  follows[targetId] = arr;
+  await setJSON('follows', follows, true);
+  state.follows = follows;
+  renderProfilePage();
+}
+
+async function toggleLike(targetId){
+  if (targetId === state.profile.id) return;
+  const likes = await getJSON('likes', true, {});
+  const arr = likes[targetId] || [];
+  const idx = arr.indexOf(state.profile.id);
+  if (idx === -1) arr.push(state.profile.id); else arr.splice(idx, 1);
+  likes[targetId] = arr;
+  await setJSON('likes', likes, true);
+  state.likes = likes;
+  renderProfilePage();
+}
+
+/* ================= Admin console ================= */
+const TIMEOUT_OPTIONS = [
+  { mins:5,   label:'5m' },
+  { mins:60,  label:'1h' },
+  { mins:1440,label:'24h' },
+];
+
+async function openConsole(){
+  if (!isAdminUser(state.profile.id)) return;
+  state.directory = await getJSON('directory', true, {});
+  if (!document.querySelector('.console-overlay')){
+    const overlay = document.createElement('div');
+    overlay.className = 'console-overlay';
+    overlay.id = 'consoleOverlay';
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeConsole(); });
+    document.body.appendChild(overlay);
+  }
+  renderConsole();
+  if (consolePoll) clearInterval(consolePoll);
+  consolePoll = setInterval(async () => {
+    if (!document.querySelector('.console-overlay')){ clearInterval(consolePoll); consolePoll = null; return; }
+    state.directory = await getJSON('directory', true, state.directory);
+    renderConsole(true);
+  }, 8000);
+}
+
+function closeConsole(){
+  if (consolePoll){ clearInterval(consolePoll); consolePoll = null; }
+  const o = document.querySelector('.console-overlay');
+  if (o) o.remove();
+}
+
+function renderConsole(preserveSearch){
+  const overlay = document.querySelector('.console-overlay');
+  if (!overlay) return;
+  const prev = preserveSearch ? (document.getElementById('consoleSearch')?.value || '') : '';
+  const q = prev.trim().toLowerCase();
+  const users = Object.values(state.directory)
+    .filter(u => !q || (u.name||'').toLowerCase().includes(q) || (u.username||'').toLowerCase().includes(q))
+    .sort((a,b) => {
+      const ar = a.roles && a.roles.includes('admin') ? 0 : 1;
+      const br = b.roles && b.roles.includes('admin') ? 0 : 1;
+      return ar - br || (a.name||'').localeCompare(b.name||'');
+    });
+
+  overlay.innerHTML = `
+    <div class="console-card">
+      <div class="console-head">
+        <h2>${shieldIcon(20)} Admin console</h2>
+        <button class="console-close" onclick="closeConsole()" aria-label="Close">&times;</button>
+      </div>
+      <div class="console-body">
+        <input id="consoleSearch" class="console-search" placeholder="Search people by name or @username" value="${esc(prev)}" oninput="renderConsole(true)">
+        ${users.map(u => userRowHtml(u)).join('') || '<div class="empty-state"><p>No people match that search.</p></div>'}
+      </div>
+    </div>`;
+  if (preserveSearch){
+    const s = document.getElementById('consoleSearch');
+    if (s){ s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  }
+}
+
+function userRowHtml(u){
+  const isMe = u.id === state.profile.id;
+  const roles = u.roles || [];
+  const banned = !!u.banned;
+  const remaining = (u.timeoutUntil && u.timeoutUntil > Date.now()) ? (u.timeoutUntil - Date.now()) : 0;
+  const status = banned ? `<span class="user-status banned">BANNED</span>`
+    : remaining ? `<span class="user-status timed">TIMED OUT &middot; ${fmtRemaining(remaining)} left</span>`
+    : `<span class="user-status active">ACTIVE</span>`;
+
+  const roleChips = ROLE_DEFS.map(r => {
+    const on = roles.includes(r.id);
+    const lockSelfAdmin = isMe && r.id === 'admin';
+    return `<button class="chip ${on?'on':''} ${r.id==='admin'?'role-admin-chip':''} ${lockSelfAdmin?'disabled':''}"
+      ${lockSelfAdmin?'title="You can&apos;t remove your own admin role"':`onclick="toggleRole('${u.id}','${r.id}')"`}>${r.label}</button>`;
+  }).join('');
+
+  let modControls;
+  if (isMe){
+    modControls = `<div class="self-note">Moderation actions are disabled on your own account.</div>`;
+  } else {
+    const timeoutChips = remaining
+      ? `<button class="chip" onclick="clearUserTimeout('${u.id}')">Remove timeout</button>`
+      : TIMEOUT_OPTIONS.map(o => `<button class="chip" onclick="timeoutUser('${u.id}',${o.mins})">Timeout ${o.label}</button>`).join('');
+    modControls = `
+      <div class="ctl-label">TIMEOUT</div>
+      <div class="ctl-row">${timeoutChips}</div>
+      <div class="ctl-label">ACCESS</div>
+      <div class="ctl-row">
+        ${banned
+          ? `<button class="chip" onclick="setBan('${u.id}',false)">Unban</button>`
+          : `<button class="chip danger" onclick="setBan('${u.id}',true)">Ban</button>`}
+      </div>`;
+  }
+
+  return `
+    <div class="user-row ${banned?'is-banned':''}">
+      <div class="user-row-top">
+        <span class="avatar" style="background:${u.color}">${initials(u.name)}</span>
+        <span class="uname">${esc(u.name)}${u.username?` <span style="color:var(--text-dim);font-weight:400;font-family:var(--font-mono);font-size:11px;">@${esc(u.username)}</span>`:''}${isMe?' <span style="color:var(--text-dim);font-weight:400;">(you)</span>':''}</span>
+        ${status}
+      </div>
+      <div class="ctl-label">ROLES</div>
+      <div class="ctl-row">${roleChips}</div>
+      ${modControls}
+    </div>`;
+}
+
+/* ---- mutations (admin-gated) ---- */
+async function withDirectory(mutator){
+  if (!isAdminUser(state.profile.id)) return;
+  const dir = await getJSON('directory', true, {});
+  for (const id in dir){
+    const p = dir[id];
+    if (!Array.isArray(p.roles)) p.roles = p.isAdmin ? ['admin'] : [];
+    if (typeof p.banned !== 'boolean') p.banned = false;
+    if (typeof p.timeoutUntil !== 'number') p.timeoutUntil = 0;
+  }
+  mutator(dir);
+  await setJSON('directory', dir, true);
+  state.directory = dir;
+  const me = dir[state.profile.id];
+  if (me) state.profile.roles = me.roles;
+  renderConsole(true);
+  const pillTags = document.getElementById('pillRoleTags');
+  if (pillTags) pillTags.innerHTML = roleTags(state.profile.id);
+  const cBtn = document.getElementById('consoleBtn');
+  if (cBtn) cBtn.style.display = isAdminUser(state.profile.id) ? 'flex' : 'none';
+}
+
+async function toggleRole(userId, roleId){
+  if (userId === state.profile.id && roleId === 'admin') return; // can't strip own admin
+  await withDirectory(dir => {
+    const u = dir[userId]; if (!u) return;
+    const i = u.roles.indexOf(roleId);
+    if (i === -1) u.roles.push(roleId); else u.roles.splice(i, 1);
+  });
+}
+
+async function setBan(userId, banned){
+  if (userId === state.profile.id) return;
+  await withDirectory(dir => { if (dir[userId]) dir[userId].banned = banned; });
+}
+
+async function timeoutUser(userId, minutes){
+  if (userId === state.profile.id) return;
+  await withDirectory(dir => { if (dir[userId]) dir[userId].timeoutUntil = Date.now() + minutes*60000; });
+}
+
+async function clearUserTimeout(userId){
+  await withDirectory(dir => { if (dir[userId]) dir[userId].timeoutUntil = 0; });
+}
+
+/* ================= Go ================= */
+boot();
+</script>
+</body>
+</html>
