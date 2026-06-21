@@ -865,7 +865,7 @@ async function saveUserIdentity(userId){
   const uname = (document.getElementById('idUsername').value||'').trim();
   const dname = (document.getElementById('idName').value||'').trim();
   const err = document.getElementById('idError');
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(uname)){ err.textContent='Usernames are 3-20 characters: letters, numbers, underscore.'; return; }
+  if (uname.length < 1 || uname.length > 20){ err.textContent='Usernames must be 1-20 characters.'; return; }
   if (!dname){ err.textContent='Display name cannot be empty.'; return; }
   err.textContent='Saving…';
   const { data: taken } = await sb.from('profiles').select('id').eq('username', uname).neq('id', userId).maybeSingle();
