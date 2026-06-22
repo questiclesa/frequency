@@ -110,6 +110,12 @@
   .chat-del{background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:0 4px;margin-left:4px;border-radius:4px;opacity:0;transition:opacity .12s;}
   .chat-msg:hover .chat-del{opacity:1;}
   .chat-del:hover{color:var(--danger);}
+  .chat-edit{background:transparent;border:none;color:var(--text-dim);cursor:pointer;line-height:0;padding:0 3px;margin-left:4px;border-radius:4px;opacity:0;transition:opacity .12s;vertical-align:middle;}
+  .chat-msg:hover .chat-edit{opacity:1;}
+  .chat-edit:hover{color:var(--teal);}
+  .edited-tag{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-left:4px;}
+  .post-edit{background:transparent;border:none;color:var(--text-dim);cursor:pointer;line-height:0;padding:2px 5px;border-radius:6px;}
+  .post-edit:hover{color:var(--teal);background:var(--surface-2);}
   .user-card{position:fixed;z-index:90;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;width:236px;box-shadow:0 18px 54px rgba(0,0,0,.55);}
   .uc-top{display:flex;gap:12px;align-items:center;margin-bottom:12px;}
   .uc-info{min-width:0;}
@@ -350,6 +356,7 @@ function filterText(text){
   return { blocked:false, text:out };
 }
 function pinIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 4h6l-1 7 3 2v1H7v-1l3-2-1-7z"/></svg>`; }
+function editIcon(size){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>`; }
 function rolesSorted(){ return (state.roles||[]).slice().sort((a,b)=>a.rank-b.rank); }
 function roleDef(id){ return (state.roles||[]).find(r=>r.id===id) || null; }
 function getUserRoles(userId){ const p = state.directory[userId]; return (p && Array.isArray(p.roles)) ? p.roles : []; }
@@ -663,11 +670,11 @@ async function loadThreads(){
 }
 async function loadPosts(threadId){
   const { data } = await sb.from('posts').select('*').eq('thread_id', threadId).order('created_at',{ascending:true});
-  state.posts = (data||[]).map(p => ({ id:p.id, authorId:p.author_id, text:p.body, createdAt:new Date(p.created_at).getTime() }));
+  state.posts = (data||[]).map(p => ({ id:p.id, authorId:p.author_id, text:p.body, createdAt:new Date(p.created_at).getTime(), editedAt:p.edited_at?new Date(p.edited_at).getTime():0 }));
 }
 async function loadChat(){
   const { data } = await sb.from('messages').select('*').order('created_at',{ascending:false}).limit(200);
-  state.chat = (data||[]).reverse().map(m => ({ id:m.id, authorId:m.author_id, text:m.body, createdAt:new Date(m.created_at).getTime() }));
+  state.chat = (data||[]).reverse().map(m => ({ id:m.id, authorId:m.author_id, text:m.body, createdAt:new Date(m.created_at).getTime(), editedAt:m.edited_at?new Date(m.edited_at).getTime():0 }));
 }
 async function loadFollows(){
   const { data } = await sb.from('follows').select('*');
@@ -984,40 +991,43 @@ function renderThreadDetail(full){
     document.getElementById('replyCountLabel').textContent = replies.length+(replies.length===1?' REPLY':' REPLIES'); return;
   }
   const ch = state.channels.find(c=>c.id===thread.channelId)||{name:''};
-  const canLock = can(state.me.id,'manage_threads');
+  const canClose = can(state.me.id,'manage_threads') || thread.authorId===state.me.id;
   document.getElementById('main').innerHTML = `
     <div class="board-main" style="max-width:760px;margin:0 auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <button class="back-link" onclick="backToList()" style="margin-bottom:0;">&larr; back to #${esc(ch.name)}</button>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${canPinThreads()?`<button class="secondary-btn" onclick="pinThread('${thread.id}',${thread.pinned?'false':'true'})">${thread.pinned?'Unpin':'Pin'}</button>`:''}
-          ${canLock?`<button class="secondary-btn" onclick="lockThread('${thread.id}',${thread.locked?'false':'true'})">${thread.locked?'Unlock':'Lock'}</button>`:''}
+          ${canClose?`<button class="secondary-btn" onclick="lockThread('${thread.id}',${thread.locked?'false':'true'})">${thread.locked?'Reopen':'Close'} thread</button>`:''}
           ${canDeleteThread(thread)?`<button class="secondary-btn" style="border-color:var(--danger);color:var(--danger);" onclick="deleteThread('${thread.id}')">Delete</button>`:''}
         </div>
       </div>
-      <h1 class="thread-title" style="margin-top:16px;">${thread.pinned?`<span class="pin-badge">${pinIcon(9)} PINNED</span>`:''}${thread.locked?`<span class="pin-badge" style="color:var(--amber);border-color:var(--amber);">LOCKED</span>`:''}${esc(thread.title)}</h1>
+      <h1 class="thread-title" style="margin-top:16px;">${thread.pinned?`<span class="pin-badge">${pinIcon(9)} PINNED</span>`:''}${thread.locked?`<span class="pin-badge" style="color:var(--amber);border-color:var(--amber);">CLOSED</span>`:''}${esc(thread.title)}</h1>
       ${state.posts[0]?postCardHtml(state.posts[0], thread):''}
       <div class="reply-count-label" id="replyCountLabel">${replies.length}${replies.length===1?' REPLY':' REPLIES'}</div>
       <div id="repliesList">${repliesHtml(replies, thread)}</div>
       ${thread.locked
-        ? `<div class="empty-state"><p>This thread is locked. No new replies can be posted.</p></div>`
+        ? `<div class="empty-state"><p>This thread is closed. No new replies can be posted.</p></div>`
         : `<div class="panel"><textarea id="replyText" rows="3" placeholder="Write a reply..."></textarea>
             <div class="panel-actions"><button class="primary-btn" onclick="submitReply('${thread.id}')">Reply</button></div></div>`}
     </div>`;
 }
 function postCardHtml(p, thread){
-  const canDel = p.authorId===state.me.id || canManageMessages();
+  const mine = p.authorId===state.me.id;
+  const canDel = mine || canManageMessages();
   return `<div class="post-card"><div class="post-head">
     ${avatarHtml(p.authorId)}
-    ${authorLink(p.authorId)}<span class="post-time">${relTime(p.createdAt)}</span>
-    ${canDel?`<span style="flex:1"></span><button class="thread-del" title="Delete" style="position:static;font-size:16px;" onclick="deletePost('${p.id}','${p.threadId||''}')">&times;</button>`:''}</div>
+    ${authorLink(p.authorId)}<span class="post-time">${relTime(p.createdAt)}${p.editedAt?' &middot; edited':''}</span>
+    <span style="flex:1"></span>
+    ${mine?`<button class="post-edit" title="Edit" onclick="startEdit('post','${p.id}')">${editIcon(14)}</button>`:''}
+    ${canDel?`<button class="thread-del" title="Delete" style="position:static;font-size:16px;" onclick="deletePost('${p.id}')">&times;</button>`:''}</div>
     <div class="post-body">${esc(p.text)}</div></div>`;
 }
 function repliesHtml(replies, thread){ return replies.length?replies.map(p=>postCardHtml(p, thread)).join(''):`<div class="empty-state"><p>No replies yet &mdash; be the first to respond.</p></div>`; }
 
 async function submitReply(threadId){
   const thread = state.threads.find(t=>t.id===threadId);
-  if (thread && thread.locked){ showNotice('Thread locked', 'This thread is locked and no longer accepts replies.'); return; }
+  if (thread && thread.locked){ showNotice('Thread closed', 'This thread is closed and no longer accepts replies.'); return; }
   const el = document.getElementById('replyText'); let text=(el.value||'').trim();
   if (!text) return;
   if (await postingBlocked()) return;
@@ -1035,8 +1045,43 @@ async function deletePost(postId){
   if (error){ showNotice('Could not delete', esc(error.message)); return; }
   await loadPosts(state.openThreadId); await loadThreads(); renderThreadDetail(true);
 }
+
+let _edit = null;
+function startEdit(kind, id){
+  const item = kind==='chat' ? state.chat.find(m=>m.id===id) : state.posts.find(p=>p.id===id);
+  if (!item || item.authorId!==state.me.id) return;
+  _edit = { kind, id };
+  const o = document.createElement('div'); o.className='modal-overlay';
+  o.innerHTML = `<div class="modal-card"><h3>Edit message</h3>
+    <textarea id="editBody" rows="4" maxlength="500" style="width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 13px;font-size:14px;resize:vertical;margin-bottom:10px;">${esc(item.text)}</textarea>
+    <div id="editErr" class="auth-error" style="margin:-2px 0 10px;"></div>
+    <div class="modal-actions">
+      <button class="secondary-btn" onclick="_edit=null; this.closest('.modal-overlay').remove()">Cancel</button>
+      <button class="primary-btn" onclick="saveEdit()">Save</button>
+    </div></div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target===o){ _edit=null; o.remove(); } });
+  const t = document.getElementById('editBody'); t.focus(); t.setSelectionRange(t.value.length, t.value.length);
+}
+async function saveEdit(){
+  if (!_edit) return;
+  let text = (document.getElementById('editBody').value||'').trim();
+  const err = document.getElementById('editErr');
+  if (!text){ err.textContent='Message cannot be empty.'; return; }
+  const f = filterText(text);
+  if (f.blocked){ err.textContent='Your message contains a filtered word.'; return; }
+  text = f.text;
+  const tbl = _edit.kind==='chat' ? 'messages' : 'posts';
+  const { error } = await sb.from(tbl).update({ body:text, edited_at:new Date().toISOString() }).eq('id', _edit.id);
+  if (error){ err.textContent = error.message; return; }
+  const kind = _edit.kind; _edit = null;
+  document.querySelectorAll('.modal-overlay').forEach(o=>o.remove());
+  if (kind==='chat'){ await loadChat(); renderChatStream(false); }
+  else { await loadPosts(state.openThreadId); renderThreadDetail(true); }
+}
 async function lockThread(id, locked){
-  if (!can(state.me.id,'manage_threads')) return;
+  const t = state.threads.find(x=>x.id===id);
+  if (!(can(state.me.id,'manage_threads') || (t && t.authorId===state.me.id))) return;
   const { error } = await sb.from('threads').update({ locked }).eq('id', id);
   if (error){ showNotice('Could not update', esc(error.message)); return; }
   await loadThreads();
@@ -1068,10 +1113,11 @@ function renderChatStream(scrollEnd){
   const near = el.scrollHeight-el.scrollTop-el.clientHeight < 80;
   if (!state.chat.length){ el.innerHTML = `<div class="empty-state"><p>The airwaves are quiet. Say something.</p></div>`; return; }
   el.innerHTML = state.chat.map(m=>{
-    const canDel = m.authorId===state.me.id || canManageMessages();
+    const mine = m.authorId===state.me.id;
+    const canDel = mine || canManageMessages();
     return `<div class="chat-msg">
       ${avatarHtml(m.authorId)}
-      <div style="flex:1;min-width:0;"><div class="chat-meta">${chatAuthorLink(m.authorId)}${relTime(m.createdAt)}${canDel?`<button class="chat-del" title="Delete" onclick="deleteMessage('${m.id}')">&times;</button>`:''}</div>
+      <div style="flex:1;min-width:0;"><div class="chat-meta">${chatAuthorLink(m.authorId)}${relTime(m.createdAt)}${m.editedAt?`<span class="edited-tag">(edited)</span>`:''}${mine?`<button class="chat-edit" title="Edit" onclick="startEdit('chat','${m.id}')">${editIcon(12)}</button>`:''}${canDel?`<button class="chat-del" title="Delete" onclick="deleteMessage('${m.id}')">&times;</button>`:''}</div>
       <div class="chat-text">${esc(m.text)}</div></div></div>`;
   }).join('');
   if (scrollEnd || near) el.scrollTop = el.scrollHeight;
